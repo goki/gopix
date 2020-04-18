@@ -1,0 +1,50 @@
+// Copyright (c) 2020, The gide / GoKi Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+package main
+
+import (
+	"flag"
+	"log"
+	"os"
+	"os/user"
+	"path/filepath"
+
+	"github.com/goki/gi/gi"
+	"github.com/goki/gi/gimain"
+	"github.com/goki/gi/oswin"
+)
+
+func main() {
+	gimain.Main(func() {
+		mainrun()
+	})
+}
+
+func mainrun() {
+	oswin.TheApp.SetName("gopix")
+	oswin.TheApp.SetAbout(`<code>GoPix</code> Is a Go picture management system within the <b>GoKi</b> tree framework.  See <a href="https://github.com/goki/gopix">GoPix on GitHub</a>`)
+
+	// oswin.TheApp.SetQuitCleanFunc(func() {
+	// 	fmt.Printf("Doing final Quit cleanup here..\n")
+	// })
+
+	usr, err := user.Current()
+	if err != nil {
+		log.Fatal(err)
+	}
+	path := filepath.Join(usr.HomeDir, "pix")
+
+	// process command args
+	if len(os.Args) > 1 {
+		flag.StringVar(&path, "path", "", "path to open -- can be to a directory or a filename within the directory ")
+		// todo: other args?
+		flag.Parse()
+	}
+
+	pv, _ := GoPixViewWindow(path)
+	pv.ThumbUpdt()
+
+	gi.WinWait.Wait()
+}
