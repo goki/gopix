@@ -19,6 +19,7 @@ import (
 	"github.com/goki/ki/ints"
 	"github.com/goki/ki/ki"
 	"github.com/goki/ki/kit"
+	"github.com/goki/ki/sliceclone"
 	"github.com/goki/mat32"
 	"github.com/goki/pi/filecat"
 )
@@ -45,9 +46,10 @@ func AddNewImgGrid(parent ki.Ki, name string) *ImgGrid {
 	return parent.AddNewChild(KiT_ImgGrid, name).(*ImgGrid)
 }
 
-// SetImages sets the current image files to view, and does a config rebuild
+// SetImages sets the current image files to view (makes a copy of slice),
+// and does a config rebuild
 func (ig *ImgGrid) SetImages(files []string) {
-	ig.Images = files
+	ig.Images = sliceclone.String(files)
 	ig.Config()
 }
 
@@ -66,6 +68,7 @@ func (ig *ImgGrid) Config() {
 		ig.Lay = gi.LayoutHoriz
 		gi.AddNewLayout(ig, "grid", gi.LayoutGrid)
 		sbb := gi.AddNewScrollBar(ig, "sb")
+		sbb.Defaults()
 		sbb.SliderSig.Connect(ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
 			igg := recv.(*ImgGrid)
 			if sig == int64(gi.SliderValueChanged) {
@@ -92,18 +95,23 @@ func (ig *ImgGrid) Config() {
 	if ng != gr.NumChildren() {
 		gr.SetNChildren(ng, gi.KiT_Bitmap, "b_")
 	}
-	nf := ig.NumImages()
-	nr := nf / ig.Size.X
-	nr = ints.MaxInt(nr, ig.Size.Y)
-	sb.Defaults()
 	sb.Min = 0
-	sb.Max = float32(nr)
-	sb.ThumbVal = float32(ig.Size.Y)
 	sb.Tracking = true
 	sb.Dim = mat32.Y
 	sb.SetFixedWidth(units.NewPx(gi.ScrollBarWidthDefault))
 	sb.SetStretchMaxHeight()
+	ig.SetScrollMax()
 	ig.Update()
+}
+
+func (ig *ImgGrid) SetScrollMax() int {
+	sb := ig.ScrollBar()
+	nf := ig.NumImages()
+	nr := int(mat32.Ceil(float32(nf)/float32(ig.Size.X))) + 1
+	nr = ints.MaxInt(nr, ig.Size.Y)
+	sb.Max = float32(nr)
+	sb.ThumbVal = float32(ig.Size.Y)
+	return nr
 }
 
 // Grid returns the actual grid layout
@@ -128,7 +136,9 @@ func (ig *ImgGrid) BitmapAtIdx(idx int) *gi.Bitmap {
 
 // ImageDeleteAt deletes image at given index
 func (ig *ImgGrid) ImageDeleteAt(idx int) {
+	// img := ig.Images[idx]
 	ig.Images = append(ig.Images[:idx], ig.Images[idx+1:]...)
+	ig.ImageSig.Emit(ig.This(), int64(ImgGridDeleted), idx)
 }
 
 // ImageInsertAt inserts image(s) at given index
@@ -138,6 +148,7 @@ func (ig *ImgGrid) ImageInsertAt(idx int, files []string) {
 	copy(nt[idx+ni:], nt[idx:])       // move stuff to end
 	copy(nt[idx:], files)             // copy into position
 	ig.Images = nt
+	ig.ImageSig.Emit(ig.This(), int64(ImgGridInserted), idx)
 }
 
 // ImgGridSignals are signals that sliceview can send, mostly for editing
@@ -180,11 +191,7 @@ func (ig *ImgGrid) LayoutGrid(iter int) bool {
 	}
 	ig.Size = gsz
 	gr.SetProp("columns", ig.Size.X)
-	nf := ig.NumImages()
-	nr := nf / ig.Size.X
-	nr = ints.MaxInt(nr, ig.Size.Y)
-	sb.Max = float32(nr)
-	sb.ThumbVal = float32(ig.Size.Y)
+	ig.SetScrollMax()
 	ig.Update()
 	return true
 }
@@ -201,13 +208,8 @@ func (ig *ImgGrid) Update() {
 	defer ig.UpdateEnd(updt)
 
 	gr := ig.Grid()
-	sb := ig.ScrollBar()
-
 	nf := ig.NumImages()
-	nr := nf / ig.Size.X
-	nr = ints.MaxInt(nr, ig.Size.Y)
-	sb.Max = float32(nr)
-
+	ig.SetScrollMax()
 	ng := ig.Size.X * ig.Size.Y
 	if ng != gr.NumChildren() {
 		gr.SetNChildren(ng, gi.KiT_Bitmap, "b_")
@@ -1128,11 +1130,10 @@ func (ig *ImgGrid) KeyInputActive(kt *key.ChordEvent) {
 		ig.SelectAllIdxs()
 		ig.SelectMode = false
 		kt.SetProcessed()
-	// case gi.KeyFunDelete: // too dangerous
-	// 	sv.SliceDeleteAt(sv.SelectedIdx, true)
-	// 	sv.SelectMode = false
-	// 	sv.SelectIdxAction(idx, mouse.SelectOne)
-	// 	kt.SetProcessed()
+	case gi.KeyFunDelete:
+		ig.CutIdxs()
+		ig.SelectMode = false
+		kt.SetProcessed()
 	case gi.KeyFunDuplicate:
 		nidx := ig.Duplicate()
 		ig.SelectMode = false

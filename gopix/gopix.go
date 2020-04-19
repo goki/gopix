@@ -34,7 +34,7 @@ func mainrun() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	path := filepath.Join(usr.HomeDir, "pix")
+	path := filepath.Join(usr.HomeDir, "Pix")
 
 	// process command args
 	if len(os.Args) > 1 {
@@ -44,7 +44,7 @@ func mainrun() {
 	}
 
 	pv, _ := GoPixViewWindow(path)
-	pv.ThumbUpdt()
+	_ = pv
 
 	gi.WinWait.Wait()
 }

@@ -5,12 +5,17 @@
 package main
 
 import (
+	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sync"
 
 	"github.com/goki/gi/gi"
 	"github.com/goki/gi/giv"
-	"github.com/goki/gi/oswin"
 	"github.com/goki/gopix/imgrid"
+	"github.com/goki/ki/dirs"
 	"github.com/goki/ki/ki"
 	"github.com/goki/ki/kit"
 	"github.com/goki/pi/filecat"
@@ -19,11 +24,10 @@ import (
 // PixView shows a picture viewer
 type PixView struct {
 	gi.Frame
-	ImageDir gi.FileName    `desc:"directory with the images"`
+	ImageDir string         `desc:"directory with the images"`
 	Folder   string         `desc:"current folder"`
 	Files    giv.FileTree   `desc:"all the files in the project directory and subdirectories"`
-	Images   []string       `view:"-" desc:"desc list of all image files in current folder"`
-	Thumbs   []string       `view:"-" desc:"desc list of all thumb files"`
+	Thumbs   []string       `view:"-" desc:"desc list of all thumb files in current folder"`
 	WaitGp   sync.WaitGroup `view:"-" desc:"wait group for synchronizing threaded layer calls"`
 }
 
@@ -36,7 +40,7 @@ func AddNewPixView(parent ki.Ki, name string) *PixView {
 
 // UpdateFiles updates the list of files saved in project
 func (pv *PixView) UpdateFiles() {
-	pv.Files.OpenPath(string(pv.ImageDir))
+	pv.Files.OpenPath(pv.ImageDir)
 	ft := pv.FileTreeView()
 	ft.SetFullReRender()
 	ft.UpdateSig()
@@ -50,7 +54,7 @@ func (pv *PixView) Config() {
 	updt := pv.UpdateStart()
 	defer pv.UpdateEnd(updt)
 
-	pv.Folder = "all"
+	pv.Folder = "All"
 	pv.Lay = gi.LayoutVert
 	pv.SetProp("spacing", gi.StdDialogVSpaceUnits)
 	gi.AddNewToolBar(pv, "toolbar")
@@ -62,7 +66,7 @@ func (pv *PixView) Config() {
 
 	ig := imgrid.AddNewImgGrid(split, "imgrid")
 	ig.ImageMax = ThumbMaxSize
-	ig.SetImages(pv.Images)
+	ig.Config()
 
 	split.SetSplits(.2, .8)
 
@@ -86,6 +90,45 @@ func (pv *PixView) Config() {
 			}
 		}
 	})
+	ig.ImageSig.Connect(pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		// igg, _ := send.Embed(imgrid.KiT_ImgGrid).(*imgrid.ImgGrid)
+		pvv, _ := recv.Embed(KiT_PixView).(*PixView)
+		idx := data.(int)
+		fn := filepath.Base(pv.Thumbs[idx])
+		switch imgrid.ImgGridSignals(sig) {
+		case imgrid.ImgGridDeleted:
+			if pvv.Folder == "All" {
+				pvv.TrashFiles([]string{fn})
+			} else {
+				pvv.DeleteInFolder(pvv.Folder, []string{fn})
+			}
+			pvv.ThumbDeleteAt(idx)
+		case imgrid.ImgGridInserted:
+			if pvv.Folder == "Trash" {
+				pvv.UntrashFiles([]string{fn})
+			} else {
+				// todo: duplicate
+			}
+			pvv.ThumbInsertAt(idx, []string{""}) // todo: not really used or sensible
+		case imgrid.ImgGridDoubleClicked:
+			fn := filepath.Base(pv.Thumbs[idx])
+			pvv.OpenFile(fn)
+		}
+	})
+}
+
+// ThumbDeleteAt deletes image at given index
+func (pv *PixView) ThumbDeleteAt(idx int) {
+	pv.Thumbs = append(pv.Thumbs[:idx], pv.Thumbs[idx+1:]...)
+}
+
+// ThumbInsertAt inserts image(s) at given index
+func (pv *PixView) ThumbInsertAt(idx int, files []string) {
+	ni := len(files)
+	nt := append(pv.Thumbs, files...) // first append to end
+	copy(nt[idx+ni:], nt[idx:])       // move stuff to end
+	copy(nt[idx:], files)             // copy into position
+	pv.Thumbs = nt
 }
 
 // FileNodeSelected is called whenever tree browser has file node selected
@@ -207,7 +250,7 @@ func GoPixViewWindow(path string) (*PixView, *gi.Window) {
 	mfr.Lay = gi.LayoutVert
 
 	pv := AddNewPixView(mfr, "pixview")
-	pv.ImageDir = gi.FileName(path)
+	pv.ImageDir = path
 	pv.Viewport = vp
 	pv.Config()
 
@@ -217,31 +260,115 @@ func GoPixViewWindow(path string) (*PixView, *gi.Window) {
 	tb := pv.ToolBar()
 	tb.UpdateActions()
 
-	inClosePrompt := false
-	win.OSWin.SetCloseReqFunc(func(w oswin.Window) {
-		// if !pv.Changed {
-		// 	win.Close()
-		// 	return
-		// }
-		if inClosePrompt {
-			return
-		}
-		inClosePrompt = true
-		gi.ChoiceDialog(vp, gi.DlgOpts{Title: "Close Without Saving?",
-			Prompt: "Do you want to save your changes?  If so, Cancel and then Save"},
-			[]string{"Close Without Saving", "Cancel"},
-			win.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
-				switch sig {
-				case 0:
-					win.Close()
-				case 1:
-					// default is to do nothing, i.e., cancel
-					inClosePrompt = false
-				}
-			})
-	})
+	// inClosePrompt := false
+	// win.OSWin.SetCloseReqFunc(func(w oswin.Window) {
+	// 	// if !pv.Changed {
+	// 	// 	win.Close()
+	// 	// 	return
+	// 	// }
+	// 	if inClosePrompt {
+	// 		return
+	// 	}
+	// 	inClosePrompt = true
+	// 	gi.ChoiceDialog(vp, gi.DlgOpts{Title: "Close Without Saving?",
+	// 		Prompt: "Do you want to save your changes?  If so, Cancel and then Save"},
+	// 		[]string{"Close Without Saving", "Cancel"},
+	// 		win.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+	// 			switch sig {
+	// 			case 0:
+	// 				win.Close()
+	// 			case 1:
+	// 				// default is to do nothing, i.e., cancel
+	// 				inClosePrompt = false
+	// 			}
+	// 		})
+	// })
 
 	vp.UpdateEndNoSig(updt)
 	win.GoStartEventLoop() // in a separate goroutine
 	return pv, win
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+//  file functions
+
+// LinkToFolder creates links in given folder o given files in ../all
+func (pv *PixView) LinkToFolder(fnm string, files []string) {
+	tdir := filepath.Join(pv.ImageDir, fnm)
+	for _, f := range files {
+		lf := filepath.Join(tdir, f)
+		sf := filepath.Join("../All", f)
+		err := os.Symlink(sf, lf)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+}
+
+// DeleteInFolder deletes links in folder
+func (pv *PixView) DeleteInFolder(fnm string, files []string) {
+	tdir := filepath.Join(pv.ImageDir, fnm)
+	for _, f := range files {
+		lf := filepath.Join(tdir, f)
+		err := os.Remove(lf)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+}
+
+// TrashFiles moves given files from All to Trash, and removes symlinks from
+// any folders
+func (pv *PixView) TrashFiles(files []string) {
+	adir := filepath.Join(pv.ImageDir, "All")
+	tdir := filepath.Join(pv.ImageDir, "Trash")
+	os.MkdirAll(tdir, 0775)
+	fmap := make(map[string]struct{}, len(files))
+	for _, f := range files {
+		fmap[f] = struct{}{}
+		tfn := filepath.Join(tdir, f)
+		afn := filepath.Join(adir, f)
+		err := os.Rename(afn, tfn)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+	drs := dirs.Dirs(pv.ImageDir)
+	for _, d := range drs {
+		if d == "All" || d == "Trash" {
+			continue
+		}
+		dp := filepath.Join(pv.ImageDir, d)
+		dfs, _ := dirs.AllFiles(dp)
+		for _, f := range dfs {
+			fb := filepath.Base(f)
+			if _, has := fmap[fb]; has {
+				os.Remove(f)
+			}
+		}
+	}
+}
+
+// UntrashFiles moves given files from Trash to All (recover from trash)
+func (pv *PixView) UntrashFiles(files []string) {
+	adir := filepath.Join(pv.ImageDir, "All")
+	tdir := filepath.Join(pv.ImageDir, "Trash")
+	os.MkdirAll(tdir, 0775)
+	for _, f := range files {
+		tfn := filepath.Join(tdir, f)
+		afn := filepath.Join(adir, f)
+		err := os.Rename(tfn, afn)
+		if err != nil {
+			log.Println(err)
+		}
+	}
+}
+
+func (pv *PixView) OpenFile(file string) {
+	adir := filepath.Join(pv.ImageDir, "All")
+	afn := filepath.Join(adir, file)
+	cstr := giv.OSOpenCommand()
+	cmd := exec.Command(cstr, afn)
+	out, _ := cmd.CombinedOutput()
+	fmt.Printf("%s\n", out)
 }

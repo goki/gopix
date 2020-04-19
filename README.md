@@ -12,9 +12,9 @@ Go picture management app, because Mac Photos bricked my entire photo library up
 
 # File Structure
 
-* Main dir: `~/pix`
-* All images live in one common directory: `~/pix/all`
-* Folders for specific albums have symbolic links to original pics in `../all/img.jpg`
+* Main dir: `~/Pix`
+* All images live in one common directory: `~/Pix/All`
+* Folders for specific albums have symbolic links to original pics in `../All/img.jpg`
 * DND / Copy/Paste operations create these symlinks, except if going into the trash -- or all
 
 # TODO

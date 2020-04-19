@@ -40,15 +40,17 @@ func (pv *PixView) ThumbClean() {
 
 // ThumbUpdate updates list of thumbnails based on current folder
 func (pv *PixView) ThumbUpdt() {
-	fdir := filepath.Join(string(pv.ImageDir), pv.Folder)
+	fdir := filepath.Join(pv.ImageDir, pv.Folder)
+	tdir := pv.ThumbDir()
+	os.MkdirAll(tdir, 0775)
 
 	imgs, err := dirs.AllFiles(fdir)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	pv.Images = imgs
-	nfl := len(pv.Images)
+	imgs = imgs[1:] // first one is the directory itself
+	nfl := len(imgs)
 	pv.Thumbs = make([]string, nfl)
 
 	ncp := runtime.NumCPU()
@@ -59,7 +61,7 @@ func (pv *PixView) ThumbUpdt() {
 		if i == ncp-1 {
 			ed = nfl
 		}
-		go pv.ThumbUpdtThr(fdir, st, ed)
+		go pv.ThumbUpdtThr(fdir, imgs, st, ed)
 		pv.WaitGp.Add(1)
 		st = ed
 	}
@@ -69,11 +71,10 @@ func (pv *PixView) ThumbUpdt() {
 	ig.SetImages(pv.Thumbs)
 }
 
-func (pv *PixView) ThumbUpdtThr(fdir string, st, ed int) {
+func (pv *PixView) ThumbUpdtThr(fdir string, imgs []string, st, ed int) {
 	tdir := pv.ThumbDir()
-	os.MkdirAll(tdir, 0775)
 	for i := st; i < ed; i++ {
-		fn := filepath.Base(pv.Images[i])
+		fn := filepath.Base(imgs[i])
 
 		ext := strings.ToLower(filepath.Ext(fn))
 		if !(ext == ".jpg" || ext == ".jpeg" || ext == ".png") {
