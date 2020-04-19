@@ -37,6 +37,7 @@ type ImgGrid struct {
 	DraggedIdxs  []int            `copy:"-" desc:"list of currently-dragged indexes"`
 	ImageSig     ki.Signal        `copy:"-" json:"-" xml:"-" desc:"signal for image events -- selection events occur via WidgetSig"`
 	CurIdx       int              `copy:"-" json:"-" xml:"-" desc:"current copy / paste idx"`
+	InfoFunc     func(idx int)    `desc:"function for displaying file at given index"`
 }
 
 var KiT_ImgGrid = kit.Types.AddType(&ImgGrid{}, ImgGridProps)
@@ -1063,25 +1064,37 @@ func (ig *ImgGrid) DropCancel() {
 //    Events
 
 func (ig *ImgGrid) StdCtxtMenu(m *gi.Menu, idx int) {
+	m.AddAction(gi.ActOpts{Label: "Info", Data: idx},
+		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
+			if igg.InfoFunc != nil {
+				igg.InfoFunc(data.(int))
+			}
+		})
 	m.AddAction(gi.ActOpts{Label: "Copy", Data: idx},
 		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
-			svv := recv.Embed(KiT_ImgGrid).(*ImgGrid)
-			svv.CopyIdxs(true)
+			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
+			igg.CopyIdxs(true)
 		})
 	m.AddAction(gi.ActOpts{Label: "Cut", Data: idx},
 		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
-			svv := recv.Embed(KiT_ImgGrid).(*ImgGrid)
-			svv.CutIdxs()
+			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
+			igg.CutIdxs()
 		})
 	m.AddAction(gi.ActOpts{Label: "Paste", Data: idx},
 		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
-			svv := recv.Embed(KiT_ImgGrid).(*ImgGrid)
-			svv.PasteIdx(data.(int))
+			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
+			igg.PasteIdx(data.(int))
 		})
 	m.AddAction(gi.ActOpts{Label: "Duplicate", Data: idx},
 		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
-			svv := recv.Embed(KiT_ImgGrid).(*ImgGrid)
-			svv.Duplicate()
+			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
+			igg.Duplicate()
+		})
+	m.AddAction(gi.ActOpts{Label: "Delete", Data: idx},
+		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
+			igg.CutIdxs()
 		})
 }
 

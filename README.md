@@ -19,7 +19,9 @@ Go picture management app, because Mac Photos bricked my entire photo library up
 
 # TODO
 
-* imggrid actions and filetree dnd to do basic actions.  trash for trash.  all is diff from other folders.
+* first pass read from AllInfo map in one thread, then parallel fill in rest -- lock contention highly inefficient
 
-* set symlink for dragging in treeview into folders
+* rotate images
+
+* write modified image with exif intact
 

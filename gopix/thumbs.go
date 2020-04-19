@@ -5,6 +5,8 @@
 package main
 
 import (
+	"bufio"
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
@@ -27,19 +29,19 @@ func (pv *PixView) ThumbDir() string {
 	return pnm
 }
 
-// ThumbClean cleans the thubmnail list of any blank files
-func (pv *PixView) ThumbClean() {
-	nf := len(pv.Thumbs)
+// InfoClean cleans the info list of any blank files
+func (pv *PixView) InfoClean() {
+	nf := len(pv.Info)
 	for i := nf - 1; i >= 0; i-- {
-		tf := pv.Thumbs[i]
-		if tf == "" {
-			pv.Thumbs = append(pv.Thumbs[:i], pv.Thumbs[i+1:]...)
+		tf := pv.Info[i]
+		if tf == nil || tf.Thumb == "" {
+			pv.Info = append(pv.Info[:i], pv.Info[i+1:]...)
 		}
 	}
 }
 
-// ThumbUpdate updates list of thumbnails based on current folder
-func (pv *PixView) ThumbUpdt() {
+// DirInfo updates Info and thumbnails based on current folder
+func (pv *PixView) DirInfo() {
 	fdir := filepath.Join(pv.ImageDir, pv.Folder)
 	tdir := pv.ThumbDir()
 	os.MkdirAll(tdir, 0775)
@@ -51,7 +53,7 @@ func (pv *PixView) ThumbUpdt() {
 	}
 	imgs = imgs[1:] // first one is the directory itself
 	nfl := len(imgs)
-	pv.Thumbs = make([]string, nfl)
+	pv.Info = make(Pics, nfl)
 
 	ncp := runtime.NumCPU()
 	nper := nfl / ncp
@@ -61,17 +63,20 @@ func (pv *PixView) ThumbUpdt() {
 		if i == ncp-1 {
 			ed = nfl
 		}
-		go pv.ThumbUpdtThr(fdir, imgs, st, ed)
+		go pv.InfoUpdtThr(fdir, imgs, st, ed)
 		pv.WaitGp.Add(1)
 		st = ed
 	}
 	pv.WaitGp.Wait()
-	pv.ThumbClean()
+	pv.InfoClean()
+	pv.Info.SortByDate(true)
+	pv.Thumbs = pv.Info.Thumbs()
+	go pv.SaveAllInfo()
 	ig := pv.ImgGrid()
 	ig.SetImages(pv.Thumbs)
 }
 
-func (pv *PixView) ThumbUpdtThr(fdir string, imgs []string, st, ed int) {
+func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 	tdir := pv.ThumbDir()
 	for i := st; i < ed; i++ {
 		fn := filepath.Base(imgs[i])
@@ -86,9 +91,25 @@ func (pv *PixView) ThumbUpdtThr(fdir string, imgs []string, st, ed int) {
 		if err != nil {
 			continue
 		}
+		pv.AllMu.Lock()
+		pi, has := pv.AllInfo[fn]
+		if has {
+			pv.Info[i] = pi
+			pv.AllMu.Unlock()
+			continue
+		}
+		pv.AllMu.Unlock()
+		pi, err = ReadExif(ffn)
+		if err != nil {
+			continue
+		}
+		pv.AllMu.Lock()
+		pv.AllInfo[fn] = pi
+		pv.AllMu.Unlock()
+		pv.Info[i] = pi
 		ifn, err := os.Stat(tfn)
 		if err == nil {
-			pv.Thumbs[i] = tfn
+			pi.Thumb = tfn
 			if !ifn.ModTime().Before(iffn.ModTime()) {
 				continue
 			}
@@ -102,7 +123,56 @@ func (pv *PixView) ThumbUpdtThr(fdir string, imgs []string, st, ed int) {
 		if err != nil {
 			log.Println(err)
 		}
-		pv.Thumbs[i] = tfn
+		pi.Thumb = tfn
 	}
 	pv.WaitGp.Done()
+}
+
+// OpenAllInfo open cached info on all pictures
+func (pv *PixView) OpenAllInfo() error {
+	ifn := filepath.Join(pv.ImageDir, "info.json")
+
+	pv.AllInfo = make(map[string]*PicInfo)
+
+	f, err := os.Open(ifn)
+	defer f.Close()
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	d := json.NewDecoder(f)
+	err = d.Decode(&pv.AllInfo)
+	if err != nil {
+		log.Println(err)
+	}
+	fmt.Printf("open all info: %d\n", len(pv.AllInfo))
+	return err
+}
+
+// SaveAllInfo save cached info on all pictures
+func (pv *PixView) SaveAllInfo() error {
+	ifn := filepath.Join(pv.ImageDir, "info.json")
+
+	f, err := os.Create(ifn)
+	defer f.Close()
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	fb := bufio.NewWriter(f) // this makes a HUGE difference in write performance!
+	defer fb.Flush()
+
+	pv.AllMu.Lock()
+	defer pv.AllMu.Unlock()
+
+	// fmt.Printf("save all info: %d\n", len(pv.AllInfo))
+	e := json.NewEncoder(fb)
+	err = e.Encode(pv.AllInfo)
+	if err != nil {
+		log.Println(err)
+	}
+	// fmt.Printf("done: save all info\n")
+	return err
 }

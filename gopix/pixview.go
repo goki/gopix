@@ -24,11 +24,14 @@ import (
 // PixView shows a picture viewer
 type PixView struct {
 	gi.Frame
-	ImageDir string         `desc:"directory with the images"`
-	Folder   string         `desc:"current folder"`
-	Files    giv.FileTree   `desc:"all the files in the project directory and subdirectories"`
-	Thumbs   []string       `view:"-" desc:"desc list of all thumb files in current folder"`
-	WaitGp   sync.WaitGroup `view:"-" desc:"wait group for synchronizing threaded layer calls"`
+	ImageDir string              `desc:"directory with the images"`
+	Folder   string              `desc:"current folder"`
+	Files    giv.FileTree        `desc:"all the files in the project directory and subdirectories"`
+	Info     Pics                `desc:"info for all the pictures"`
+	AllInfo  map[string]*PicInfo `desc:"map of info for all files"`
+	AllMu    sync.Mutex          `desc:"mutex protecting AllInfo"`
+	Thumbs   []string            `view:"-" desc:"desc list of all thumb files in current folder"`
+	WaitGp   sync.WaitGroup      `view:"-" desc:"wait group for synchronizing threaded layer calls"`
 }
 
 var KiT_PixView = kit.Types.AddType(&PixView{}, PixViewProps)
@@ -67,6 +70,7 @@ func (pv *PixView) Config() {
 	ig := imgrid.AddNewImgGrid(split, "imgrid")
 	ig.ImageMax = ThumbMaxSize
 	ig.Config()
+	ig.InfoFunc = pv.FileInfo
 
 	split.SetSplits(.2, .8)
 
@@ -135,7 +139,7 @@ func (pv *PixView) ThumbInsertAt(idx int, files []string) {
 func (pv *PixView) FileNodeSelected(fn *giv.FileNode, tvn *FileTreeView) {
 	if fn.IsDir() {
 		pv.Folder = fn.Nm
-		pv.ThumbUpdt()
+		pv.DirInfo()
 	}
 }
 
@@ -252,6 +256,7 @@ func GoPixViewWindow(path string) (*PixView, *gi.Window) {
 	pv := AddNewPixView(mfr, "pixview")
 	pv.ImageDir = path
 	pv.Viewport = vp
+	pv.OpenAllInfo()
 	pv.Config()
 
 	mmen := win.MainMenu
@@ -371,4 +376,10 @@ func (pv *PixView) OpenFile(file string) {
 	cmd := exec.Command(cstr, afn)
 	out, _ := cmd.CombinedOutput()
 	fmt.Printf("%s\n", out)
+}
+
+// FileInfo shows info for given file index
+func (pv *PixView) FileInfo(idx int) {
+	inf := pv.Info[idx]
+	giv.StructViewDialog(pv.Viewport, inf, giv.DlgOpts{Title: "Picture Info: " + inf.File}, nil, nil)
 }
