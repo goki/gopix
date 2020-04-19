@@ -13,20 +13,32 @@ import (
 	"strings"
 
 	"github.com/anthonynsimon/bild/imgio"
-	"github.com/anthonynsimon/bild/transform"
 	"github.com/goki/gi/gi"
-	"github.com/goki/gi/oswin"
 	"github.com/goki/ki/dirs"
 )
 
 const ThumbMaxSize = 240
 
+// ThumbDir returns the cache dir to use for storing thumbnails
 func (pv *PixView) ThumbDir() string {
-	pdir := oswin.TheApp.AppPrefsDir()
+	ucdir, _ := os.UserCacheDir()
+	pdir := filepath.Join(ucdir, "gopix")
 	pnm := filepath.Join(pdir, "thumbs")
 	return pnm
 }
 
+// ThumbClean cleans the thubmnail list of any blank files
+func (pv *PixView) ThumbClean() {
+	nf := len(pv.Thumbs)
+	for i := nf - 1; i >= 0; i-- {
+		tf := pv.Thumbs[i]
+		if tf == "" {
+			pv.Thumbs = append(pv.Thumbs[:i], pv.Thumbs[i+1:]...)
+		}
+	}
+}
+
+// ThumbUpdate updates list of thumbnails based on current folder
 func (pv *PixView) ThumbUpdt() {
 	fdir := filepath.Join(string(pv.ImageDir), pv.Folder)
 
@@ -52,9 +64,9 @@ func (pv *PixView) ThumbUpdt() {
 		st = ed
 	}
 	pv.WaitGp.Wait()
+	pv.ThumbClean()
 	ig := pv.ImgGrid()
-	ig.Files = pv.Thumbs
-	ig.Update()
+	ig.SetImages(pv.Thumbs)
 }
 
 func (pv *PixView) ThumbUpdtThr(fdir string, st, ed int) {
@@ -84,22 +96,7 @@ func (pv *PixView) ThumbUpdtThr(fdir string, st, ed int) {
 		if err != nil {
 			continue
 		}
-		sz := img.Bounds().Size()
-		tsz := sz
-		if sz.X > sz.Y {
-			if tsz.X > ThumbMaxSize {
-				tsz.X = ThumbMaxSize
-				tsz.Y = int(float32(sz.Y) * (float32(tsz.X) / float32(sz.X)))
-			}
-		} else {
-			if tsz.Y > ThumbMaxSize {
-				tsz.Y = ThumbMaxSize
-				tsz.X = int(float32(sz.X) * (float32(tsz.Y) / float32(sz.Y)))
-			}
-		}
-		if tsz != sz {
-			img = transform.Resize(img, tsz.X, tsz.Y, transform.Linear)
-		}
+		img = gi.ImageResizeMax(img, ThumbMaxSize)
 		err = gi.SaveImage(tfn, img)
 		if err != nil {
 			log.Println(err)

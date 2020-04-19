@@ -2,7 +2,7 @@
 
 Go picture management app, because Mac Photos bricked my entire photo library upon updating to Catalina.
 
-# Goals:
+# Goals
 
 * simple, entirely file-based design -- no databases.   just write to exif meta data on images themselves.  so everything is future-proof and no lockin.
 
@@ -10,13 +10,16 @@ Go picture management app, because Mac Photos bricked my entire photo library up
 
 * use gimp for photo retouching, or preview
 
+# File Structure
+
+* Main dir: `~/pix`
+* All images live in one common directory: `~/pix/all`
+* Folders for specific albums have symbolic links to original pics in `../all/img.jpg`
+* DND / Copy/Paste operations create these symlinks, except if going into the trash -- or all
+
 # TODO
 
-* set grid size based on allocated size at start of layout
-
-* thumb and icon renders -- use icons for tree view -- needs an svg image node?
-
-* click on image grid items, and scroll wheel for ImgGrid
+* imggrid actions and filetree dnd to do basic actions.  trash for trash.  all is diff from other folders.
 
 * set symlink for dragging in treeview into folders
 

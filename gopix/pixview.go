@@ -61,7 +61,8 @@ func (pv *PixView) Config() {
 	ft.OpenDepth = 4
 
 	ig := imgrid.AddNewImgGrid(split, "imgrid")
-	ig.Config()
+	ig.ImageMax = ThumbMaxSize
+	ig.SetImages(pv.Images)
 
 	split.SetSplits(.2, .8)
 
@@ -89,9 +90,10 @@ func (pv *PixView) Config() {
 
 // FileNodeSelected is called whenever tree browser has file node selected
 func (pv *PixView) FileNodeSelected(fn *giv.FileNode, tvn *FileTreeView) {
-	// if fn.IsDir() {
-	// } else {
-	// }
+	if fn.IsDir() {
+		pv.Folder = fn.Nm
+		pv.ThumbUpdt()
+	}
 }
 
 // FileNodeOpened is called whenever file node is double-clicked in file tree
