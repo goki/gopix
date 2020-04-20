@@ -27,10 +27,10 @@ type PixView struct {
 	ImageDir string              `desc:"directory with the images"`
 	Folder   string              `desc:"current folder"`
 	Files    giv.FileTree        `desc:"all the files in the project directory and subdirectories"`
-	Info     Pics                `desc:"info for all the pictures"`
+	Info     Pics                `desc:"info for all the pictures in current folder"`
 	AllInfo  map[string]*PicInfo `desc:"map of info for all files"`
 	AllMu    sync.Mutex          `desc:"mutex protecting AllInfo"`
-	Thumbs   []string            `view:"-" desc:"desc list of all thumb files in current folder"`
+	Thumbs   []string            `view:"-" desc:"desc list of all thumb files in current folder -- sent to ImgGrid -- must be in 1-to-1 order with Info"`
 	WaitGp   sync.WaitGroup      `view:"-" desc:"wait group for synchronizing threaded layer calls"`
 }
 
@@ -72,7 +72,7 @@ func (pv *PixView) Config() {
 	ig.Config()
 	ig.InfoFunc = pv.FileInfo
 
-	split.SetSplits(.2, .8)
+	split.SetSplits(.1, .9)
 
 	pv.UpdateFiles()
 	ft.SetRootNode(&pv.Files)
@@ -98,42 +98,48 @@ func (pv *PixView) Config() {
 		// igg, _ := send.Embed(imgrid.KiT_ImgGrid).(*imgrid.ImgGrid)
 		pvv, _ := recv.Embed(KiT_PixView).(*PixView)
 		idx := data.(int)
-		fn := filepath.Base(pv.Thumbs[idx])
+		fn := filepath.Base(pv.Info[idx].File)
 		switch imgrid.ImgGridSignals(sig) {
 		case imgrid.ImgGridDeleted:
 			if pvv.Folder == "All" {
 				pvv.TrashFiles([]string{fn})
 			} else {
-				pvv.DeleteInFolder(pvv.Folder, []string{fn})
+				pvv.DeleteInFolder(pvv.Folder, []string{fn}) // this works for Trash too -- permanent..
 			}
-			pvv.ThumbDeleteAt(idx)
+			pvv.PicDeleteAt(idx)
 		case imgrid.ImgGridInserted:
-			if pvv.Folder == "Trash" {
-				pvv.UntrashFiles([]string{fn})
-			} else {
-				// todo: duplicate
-			}
-			pvv.ThumbInsertAt(idx, []string{""}) // todo: not really used or sensible
+			// we don't really have anything useful to do here..
+		// 	if pvv.Folder == "Trash" {
+		// 		pvv.UntrashFiles([]string{fn})
+		// 	} else {
+		// 		// todo: duplicate
+		// 	}
+		// 	pvv.PicInsertAt(idx, []string{""}) // todo: not really used or sensible
 		case imgrid.ImgGridDoubleClicked:
-			fn := filepath.Base(pv.Thumbs[idx])
 			pvv.OpenFile(fn)
 		}
 	})
 }
 
-// ThumbDeleteAt deletes image at given index
-func (pv *PixView) ThumbDeleteAt(idx int) {
+// PicDeleteAt deletes image at given index
+func (pv *PixView) PicDeleteAt(idx int) {
+	pv.Info = append(pv.Info[:idx], pv.Info[idx+1:]...)
 	pv.Thumbs = append(pv.Thumbs[:idx], pv.Thumbs[idx+1:]...)
 }
 
-// ThumbInsertAt inserts image(s) at given index
-func (pv *PixView) ThumbInsertAt(idx int, files []string) {
-	ni := len(files)
-	nt := append(pv.Thumbs, files...) // first append to end
-	copy(nt[idx+ni:], nt[idx:])       // move stuff to end
-	copy(nt[idx:], files)             // copy into position
-	pv.Thumbs = nt
-}
+// PicInsertAt inserts image(s) at given index
+// func (pv *PixView) PicInsertAt(idx int, files []string) {
+// 	ni := len(files)
+//
+// 	// nt := append(pv.Info, files...) // first append to end
+// 	// copy(nt[idx+ni:], nt[idx:])     // move stuff to end
+// 	// copy(nt[idx:], files)           // copy into position
+// 	// pv.Info = nt
+// 	nt := append(pv.Thumbs, files...) // first append to end
+// 	copy(nt[idx+ni:], nt[idx:])       // move stuff to end
+// 	copy(nt[idx:], files)             // copy into position
+// 	pv.Thumbs = nt
+// }
 
 // FileNodeSelected is called whenever tree browser has file node selected
 func (pv *PixView) FileNodeSelected(fn *giv.FileNode, tvn *FileTreeView) {

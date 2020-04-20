@@ -99,6 +99,7 @@ func (ig *ImgGrid) Config() {
 	sb.Min = 0
 	sb.Tracking = true
 	sb.Dim = mat32.Y
+	sb.Value = 0
 	sb.SetFixedWidth(units.NewPx(gi.ScrollBarWidthDefault))
 	sb.SetStretchMaxHeight()
 	ig.SetScrollMax()

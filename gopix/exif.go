@@ -20,8 +20,8 @@ import (
 // PicInfo is the information about a picture / video, extracted from
 // EXIF format etc
 type PicInfo struct {
-	File      string            `desc:"file name"`
-	Thumb     string            `desc:"thumb file"`
+	File      string            `desc:"image file name"`
+	Thumb     string            `desc:"thumb file name -- always encoded as a .jpg"`
 	Size      image.Point       `desc:"size of image in raw pixels"`
 	DateTaken time.Time         `desc:"date when the image / video was taken"`
 	DateMod   time.Time         `desc:"date when image was last modified / edit"`
@@ -56,12 +56,20 @@ func (pc Pics) Thumbs() []string {
 	return th
 }
 
+// https://www.exiv2.org/tags.html
+
 // GPSCoord is a GPS position as decimal degrees
 type GPSCoord struct {
-	Lat     float64 `desc:"latitutde as decimal degrees -- a single value in range +/-90.etc"`
-	Long    float64 `desc:"longitude as decimal degrees -- a single value in range +/-180.etc"`
-	Alt     float64 `desc:"altitude -- units?"`
-	Bearing float64 `desc:"bearing -- ??"`
+	Lat            float64 `desc:"latitutde as decimal degrees -- a single value in range +/-90.etc"`
+	Long           float64 `desc:"longitude as decimal degrees -- a single value in range +/-180.etc"`
+	Alt            float64 `desc:"altitude in meters"`
+	Bearing        float64 `desc:"bearing -- ??"`
+	DestBearing    float64 `desc:"destination bearing -- where is the phone going"`
+	DestBearingRef string  `desc:"reference for bearing:  M = magnetic, T = true north"`
+	ImgDir         float64 `desc:"image direction -- where the phone is pointing"`
+	ImgDirRef      string  `desc:"reference for image direction: M = magnetic, T = true north"`
+	Speed          float64 `desc:"camera speed"`
+	SpeedRef       string  `desc:"camera speed reference"`
 }
 
 // DecDegFromDMS converts from degrees, minutes and seconds to a decimal
@@ -262,6 +270,7 @@ func ReadExif(fn string) (*PicInfo, error) {
 	_, err = exif.Visit(exifcommon.IfdStandard, im, ti, rawExif, visitor)
 	lat := [4]float64{}
 	long := [4]float64{}
+	var gpstime []float64
 	pi.Tags = make(map[string]string)
 	for _, e := range entries {
 		// fmt.Printf("Tag: %s  Value: %s\n", e.TagName, e.ValueString)
@@ -314,13 +323,28 @@ func ReadExif(fn string) (*PicInfo, error) {
 			}
 		case "GPSAltitude":
 			pi.GPSLoc.Alt = e.ToFloat()
+		case "GPSAltitudeRef":
 		case "GPSBearing":
 			pi.GPSLoc.Bearing = e.ToFloat()
+		case "GPSDestBearing":
+			pi.GPSLoc.DestBearing = e.ToFloat()
+		case "GPSDestBearingRef":
+			pi.GPSLoc.DestBearingRef = e.ValueString
+		case "GPSImgDirection":
+			pi.GPSLoc.ImgDir = e.ToFloat()
+		case "GPSImgDirectionRef":
+			pi.GPSLoc.ImgDirRef = e.ValueString
+		case "GPSSpeed":
+			pi.GPSLoc.Speed = e.ToFloat()
+		case "GPSSpeedRef":
+			pi.GPSLoc.SpeedRef = e.ValueString
 		case "GPSDateStamp":
 			pi.GPSDate, err = time.Parse("2006:01:02", e.ValueString)
 			if err != nil {
 				log.Println(err)
 			}
+		case "GPSTimeStamp":
+			gpstime = e.ToFloats()
 		case "MakerNote":
 		case "UserComment":
 		case "ComponentsConfiguration":
@@ -338,6 +362,10 @@ func ReadExif(fn string) (*PicInfo, error) {
 	pi.GPSLoc.Long = DecDegFromDMS(long[0], long[1], long[2])
 	if pi.DateMod.IsZero() {
 		pi.DateMod = pi.DateTaken
+	}
+	if gpstime != nil {
+		durf := gpstime[0]*3600 + gpstime[1]*60 + gpstime[2]
+		pi.GPSDate.Add(time.Duration(durf))
 	}
 	return pi, nil
 }
