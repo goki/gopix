@@ -315,9 +315,13 @@ func ReadExif(fn string) (*Info, error) {
 	}
 	if lat[3] != 0 {
 		lat[0] *= lat[3]
+		lat[1] *= lat[3]
+		lat[2] *= lat[3]
 	}
 	if long[3] != 0 {
 		long[0] *= long[3]
+		long[1] *= long[3]
+		long[2] *= long[3]
 	}
 	pi.GPSLoc.Lat = DecDegFromDMS(lat[0], lat[1], lat[2])
 	pi.GPSLoc.Long = DecDegFromDMS(long[0], long[1], long[2])

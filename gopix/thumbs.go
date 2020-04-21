@@ -205,7 +205,7 @@ func AvgImgGrey(img *image.RGBA, reg image.Rectangle) float32 {
 // of All files are unique -- we use common .jpg extension for thumbs,
 // so this must be true
 func (pv *PixView) UniquifyBaseNames() {
-	fmt.Printf("Ensuring base names are unique...\n")
+	// fmt.Printf("Ensuring base names are unique...\n")
 	adir := filepath.Join(pv.ImageDir, "All")
 
 	pv.UpdateFolders()
@@ -253,7 +253,7 @@ func (pv *PixView) UniquifyBaseNames() {
 		}
 	}
 
-	fmt.Printf("Renaming %d files...\n", len(rmap))
+	// fmt.Printf("Renaming %d files...\n", len(rmap))
 	for of, rf := range rmap {
 		fmt.Printf("%s -> %s\n", of, rf)
 		pv.RenameFile(of, rf)
