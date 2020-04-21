@@ -2,89 +2,22 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-package main
+package picinfo
 
 import (
 	"fmt"
-	"image"
 	"io/ioutil"
 	"log"
 	"os"
-	"sort"
 	"time"
 
 	"github.com/dsoprea/go-exif/v2"
 	exifcommon "github.com/dsoprea/go-exif/v2/common"
+	"github.com/goki/pi/filecat"
 )
 
-// PicInfo is the information about a picture / video, extracted from
-// EXIF format etc
-type PicInfo struct {
-	File      string            `desc:"image file name"`
-	Thumb     string            `desc:"thumb file name -- always encoded as a .jpg"`
-	Size      image.Point       `desc:"size of image in raw pixels"`
-	DateTaken time.Time         `desc:"date when the image / video was taken"`
-	DateMod   time.Time         `desc:"date when image was last modified / edit"`
-	GPSLoc    GPSCoord          `desc:"GPS coordinates of location of shot"`
-	GPSDate   time.Time         `desc:"GPS version of the time"`
-	Exposure  Exposure          `desc:"standard exposure info"`
-	Tags      map[string]string `desc:"full set of name / value tags"`
-}
-
-// Pics is a slice of PicInfo for all the pictures
-type Pics []*PicInfo
-
-// SortByDate sorts the pictures by date taken
-func (pc Pics) SortByDate(ascending bool) {
-	if ascending {
-		sort.Slice(pc, func(i, j int) bool {
-			return pc[i].DateTaken.Before(pc[j].DateTaken)
-		})
-	} else {
-		sort.Slice(pc, func(i, j int) bool {
-			return pc[j].DateTaken.Before(pc[i].DateTaken)
-		})
-	}
-}
-
-// Thumbs returns the list of thumbs for this set of pictures
-func (pc Pics) Thumbs() []string {
-	th := make([]string, len(pc))
-	for i, pi := range pc {
-		th[i] = pi.Thumb
-	}
-	return th
-}
-
+// reference for all defined tags:
 // https://www.exiv2.org/tags.html
-
-// GPSCoord is a GPS position as decimal degrees
-type GPSCoord struct {
-	Lat            float64 `desc:"latitutde as decimal degrees -- a single value in range +/-90.etc"`
-	Long           float64 `desc:"longitude as decimal degrees -- a single value in range +/-180.etc"`
-	Alt            float64 `desc:"altitude in meters"`
-	Bearing        float64 `desc:"bearing -- ??"`
-	DestBearing    float64 `desc:"destination bearing -- where is the phone going"`
-	DestBearingRef string  `desc:"reference for bearing:  M = magnetic, T = true north"`
-	ImgDir         float64 `desc:"image direction -- where the phone is pointing"`
-	ImgDirRef      string  `desc:"reference for image direction: M = magnetic, T = true north"`
-	Speed          float64 `desc:"camera speed"`
-	SpeedRef       string  `desc:"camera speed reference"`
-}
-
-// DecDegFromDMS converts from degrees, minutes and seconds to a decimal
-func DecDegFromDMS(degs, mins, secs float64) float64 {
-	return degs + mins/60 + secs/3600
-}
-
-// Exposure has standard exposure information
-type Exposure struct {
-	Time     float64 `desc:"exposure time"`
-	FStop    float64 `desc:"fstop"`
-	ISOSpeed float64 `desc:"ISO speed"`
-	FocalLen float64 `desc:"focal length"`
-	Aperture float64 `desc:"aperture"`
-}
 
 // One entry of EXIF data -- used internally
 type IfdEntry struct {
@@ -196,8 +129,12 @@ func (e *IfdEntry) ToFloats() []float64 {
 	return rf
 }
 
-func ReadExif(fn string) (*PicInfo, error) {
-	pi := &PicInfo{File: fn}
+// ReadExif reads the exif info for given file, which should be full path to file
+func ReadExif(fn string) (*Info, error) {
+	pi := &Info{File: fn}
+	pi.Defaults()
+
+	pi.Sup = filecat.SupportedFromFile(fn)
 
 	f, err := os.Open(fn)
 	defer f.Close()
@@ -272,23 +209,37 @@ func ReadExif(fn string) (*PicInfo, error) {
 	long := [4]float64{}
 	var gpstime []float64
 	pi.Tags = make(map[string]string)
+	var dto time.Time
+	var dtd time.Time
+	var dtp time.Time
 	for _, e := range entries {
 		// fmt.Printf("Tag: %s  Value: %s\n", e.TagName, e.ValueString)
 		switch e.TagName {
 		case "DateTimeOriginal":
-			pi.DateTaken, err = time.Parse("2006:01:02 15:04:05", e.ValueString)
+			dto, err = time.Parse("2006:01:02 15:04:05", e.ValueString)
 			if err != nil {
 				log.Println(err)
 			}
 		case "DateTimeDigitized":
-			pi.DateTaken, err = time.Parse("2006:01:02 15:04:05", e.ValueString)
+			dtd, err = time.Parse("2006:01:02 15:04:05", e.ValueString)
 			if err != nil {
 				log.Println(err)
 			}
+		case "DateTime":
+			dtp, err = time.Parse("2006:01:02 15:04:05", e.ValueString)
+			if err != nil {
+				log.Println(err)
+			}
+		case "ImageNumber":
+			pi.Number = e.ToInt()
 		case "PixelYDimension":
 			pi.Size.Y = e.ToInt()
 		case "PixelXDimension":
 			pi.Size.X = e.ToInt()
+		case "BitsPerSample":
+			pi.Depth = e.ToInt()
+		case "Orientation":
+			pi.Orient = Orientations(e.ToInt())
 		case "ExposureTime":
 			pi.Exposure.Time = e.ToFloat()
 		case "ISOSpeedRatings":
@@ -325,7 +276,7 @@ func ReadExif(fn string) (*PicInfo, error) {
 			pi.GPSLoc.Alt = e.ToFloat()
 		case "GPSAltitudeRef":
 		case "GPSBearing":
-			pi.GPSLoc.Bearing = e.ToFloat()
+			pi.GPSLoc.DestBearing = e.ToFloat()
 		case "GPSDestBearing":
 			pi.GPSLoc.DestBearing = e.ToFloat()
 		case "GPSDestBearingRef":
@@ -351,6 +302,16 @@ func ReadExif(fn string) (*PicInfo, error) {
 		default:
 			pi.Tags[e.TagName] = e.ValueString
 		}
+	}
+	if !dto.IsZero() {
+		pi.DateTaken = dto
+	} else if !dtd.IsZero() {
+		pi.DateTaken = dtd
+	} else if !dtp.IsZero() {
+		pi.DateTaken = dtp
+	}
+	if !dtp.IsZero() && pi.DateTaken != dtp {
+		pi.DateMod = dtp
 	}
 	if lat[3] != 0 {
 		lat[0] *= lat[3]

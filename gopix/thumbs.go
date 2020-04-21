@@ -5,8 +5,6 @@
 package main
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
 	"image"
 	"log"
@@ -15,11 +13,11 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/anthonynsimon/bild/imgio"
 	"github.com/goki/gi/gi"
+	"github.com/goki/gopix/picinfo"
 	"github.com/goki/ki/dirs"
 	"github.com/goki/mat32"
-	"github.com/jdeng/goheif"
+	"github.com/goki/pi/filecat"
 )
 
 const ThumbMaxSize = 256
@@ -57,22 +55,22 @@ func (pv *PixView) DirInfo() {
 	}
 	imgs = imgs[1:] // first one is the directory itself
 	nfl := len(imgs)
-	pv.Info = make(Pics, nfl)
+	pv.Info = make(picinfo.Pics, nfl)
 
 	// fmt.Printf("N files %d\n", nfl)
 
 	// first pass fill in from existing info -- no locking
 	for i := nfl - 1; i >= 0; i-- {
 		fn := filepath.Base(imgs[i])
-		ext := strings.ToLower(filepath.Ext(fn))
-		if !(ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" || ext == ".heic") {
-			imgs = append(imgs[:i], imgs[i+1:]...)
-			pv.Info = append(pv.Info[:i], pv.Info[i+1:]...)
-			continue
-		}
 		pi, has := pv.AllInfo[fn]
 		if has {
 			pv.Info[i] = pi
+			continue
+		}
+		typ := filecat.SupportedFromFile(fn)
+		if typ.Cat() != filecat.Image { // todo: movies!
+			imgs = append(imgs[:i], imgs[i+1:]...)
+			pv.Info = append(pv.Info[:i], pv.Info[i+1:]...)
 		}
 	}
 
@@ -111,12 +109,11 @@ func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 			continue
 		}
 		fn := filepath.Base(imgs[i])
-		ext := filepath.Ext(fn)
-		fnext := strings.TrimSuffix(fn, ext)
+		fnext, _ := dirs.SplitExt(fn)
 		ffn := filepath.Join(fdir, fn)
 		tfn := filepath.Join(tdir, fnext+".jpg")
 		iffn, _ := os.Stat(ffn)
-		pi, err := ReadExif(ffn)
+		pi, err := picinfo.ReadExif(ffn)
 		if pi == nil {
 			fmt.Printf("failed exif: %v err: %v\n", fn, err)
 			continue
@@ -132,11 +129,12 @@ func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 				continue
 			}
 		}
-		img, err := OpenImage(ffn)
+		img, err := picinfo.OpenImage(ffn)
 		if err != nil {
 			continue
 		}
 		img = gi.ImageResizeMax(img, ThumbMaxSize)
+		img = picinfo.OrientImage(img, pi.Orient)
 		isz := img.Bounds().Size()
 		rgb := img.(*image.RGBA)
 		tr := &gi.TextRender{}
@@ -165,88 +163,23 @@ func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 
 // OpenAllInfo open cached info on all pictures
 func (pv *PixView) OpenAllInfo() error {
-	ifn := filepath.Join(pv.ImageDir, "info.json")
-
-	pv.AllInfo = make(map[string]*PicInfo)
-
-	f, err := os.Open(ifn)
-	defer f.Close()
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
 	fmt.Printf("Loading All photos info\n")
-	d := json.NewDecoder(f)
-	err = d.Decode(&pv.AllInfo)
-	if err != nil {
-		log.Println(err)
-	}
+	ifn := filepath.Join(pv.ImageDir, "info.json")
+	err := pv.AllInfo.OpenJSON(ifn)
+	adir := filepath.Join(pv.ImageDir, "All")
+	tdir := pv.ThumbDir()
+	pv.AllInfo.SetFileThumb(adir, tdir)
 	fmt.Printf("%d Pictures Loaded\n", len(pv.AllInfo))
 	return err
 }
 
 // SaveAllInfo save cached info on all pictures
 func (pv *PixView) SaveAllInfo() error {
-	ifn := filepath.Join(pv.ImageDir, "info.json")
-
-	f, err := os.Create(ifn)
-	defer f.Close()
-	if err != nil {
-		log.Println(err)
-		return err
-	}
-
-	fb := bufio.NewWriter(f) // this makes a HUGE difference in write performance!
-	defer fb.Flush()
-
 	pv.AllMu.Lock()
 	defer pv.AllMu.Unlock()
-
-	// fmt.Printf("save all info: %d\n", len(pv.AllInfo))
-	e := json.NewEncoder(fb)
-	err = e.Encode(pv.AllInfo)
-	if err != nil {
-		log.Println(err)
-	}
-	// fmt.Printf("done: save all info\n")
+	ifn := filepath.Join(pv.ImageDir, "info.json")
+	err := pv.AllInfo.SaveJSON(ifn)
 	return err
-}
-
-// OpenImage handles all image formats including jpeg or HEIC
-func OpenImage(fnm string) (image.Image, error) {
-	ext := strings.ToLower(filepath.Ext(fnm))
-	if ext == ".jpg" || ext == ".jpeg" || ext == ".png" || ext == ".gif" {
-		img, err := imgio.Open(fnm)
-		if err != nil {
-			log.Println(err)
-		}
-		return img, err
-	}
-	if ext == ".heic" {
-		img, err := OpenHEIC(fnm)
-		if err != nil {
-			log.Println(err)
-		}
-		return img, err
-	}
-	return nil, fmt.Errorf("unsupported image file type: %s", ext)
-}
-
-// OpenHEIC opens a HEIC formatted file
-func OpenHEIC(fnm string) (image.Image, error) {
-	f, err := os.Open(fnm)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	img, err := goheif.Decode(f)
-	if err != nil {
-		return nil, err
-	}
-
-	return img, nil
 }
 
 // AvgImgGrey returns the average image intensity (greyscale value) in given region
@@ -266,4 +199,126 @@ func AvgImgGrey(img *image.RGBA, reg image.Rectangle) float32 {
 		gsum /= float32(cnt)
 	}
 	return gsum
+}
+
+// UniquifyBaseNames ensures that the base names (pre image extension)
+// of All files are unique -- we use common .jpg extension for thumbs,
+// so this must be true
+func (pv *PixView) UniquifyBaseNames() {
+	fmt.Printf("Ensuring base names are unique...\n")
+	adir := filepath.Join(pv.ImageDir, "All")
+
+	pv.UpdateFolders()
+	pv.GetFolderFiles() // greatly speeds up rename
+
+	imgs, err := dirs.AllFiles(adir)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	imgs = imgs[1:]                   // first one is the directory itself
+	bmap := make(map[string][]string) // base map of all versions
+	for _, img := range imgs {
+		fn := filepath.Base(img)
+		ext := filepath.Ext(fn)
+		b := strings.TrimSuffix(fn, ext)
+		fl, has := bmap[b]
+		if has {
+			fl = append(fl, fn)
+			bmap[b] = fl
+		} else {
+			bmap[b] = []string{fn}
+		}
+	}
+
+	rmap := make(map[string]string) // rename map
+
+	for b, fl := range bmap {
+		nf := len(fl)
+		if nf == 1 {
+			continue
+		}
+		fi := 0
+		for i := 1; i < 100000; i++ {
+			tb := fmt.Sprintf("%s_%d", b, i)
+			if _, has := bmap[tb]; !has {
+				fn := fl[fi]
+				ext := filepath.Ext(fn)
+				rmap[fn] = tb + ext
+				fi++
+				if fi >= nf {
+					break
+				}
+			}
+		}
+	}
+
+	fmt.Printf("Renaming %d files...\n", len(rmap))
+	for of, rf := range rmap {
+		fmt.Printf("%s -> %s\n", of, rf)
+		pv.RenameFile(of, rf)
+	}
+
+	pv.FolderFiles = nil // done
+}
+
+// RenameByDate renames image files by their date taken.
+// Operates on AllInfo so must be done after that is loaded.
+func (pv *PixView) RenameByDate() {
+	fmt.Printf("Renaming files by their DateTaken...\n")
+
+	pv.UpdateFolders()
+	pv.GetFolderFiles() // greatly speeds up rename
+
+	adir := filepath.Join(pv.ImageDir, "All")
+	tdir := pv.ThumbDir()
+
+	bmap := make(map[string]string, len(pv.AllInfo))
+	for fn := range pv.AllInfo {
+		fnext, _ := dirs.SplitExt(fn)
+		bmap[fnext] = fn
+	}
+
+	for fn, pi := range pv.AllInfo {
+		if pi.DateTaken.IsZero() {
+			continue
+		}
+		fnext, ext := dirs.SplitExt(fn)
+		ds := pi.DateTaken.Format("2006_01_02_15_04_05")
+		lext := strings.ToLower(ext)
+		n := pi.Number
+		nfnb := fmt.Sprintf("img_%s_n%d", ds, n)
+		nfn := nfnb + lext
+
+		if fn == nfn {
+			continue
+		}
+
+		for i := n; i < 100000; i++ {
+			_, hasa := pv.AllInfo[nfn]
+			_, hasb := bmap[nfnb]
+			if !hasa && !hasb {
+				break
+			}
+			n = i
+			nfnb = fmt.Sprintf("img_%s_n%d", ds, n)
+			nfn = nfnb + lext
+		}
+		pi.Number = n
+
+		// fmt.Printf("rename: %s -> %s\n", fn, nfn)
+		pv.RenameFile(fn, nfn)
+		pi.File = filepath.Join(adir, nfn)
+
+		delete(bmap, fnext)
+		bmap[nfnb] = nfn
+
+		tfn := nfnb + ".jpg"
+		tnfn := filepath.Join(tdir, tfn)
+		os.Rename(pi.Thumb, tnfn)
+		pi.Thumb = tnfn
+
+		delete(pv.AllInfo, fn)
+		pv.AllInfo[nfn] = pi
+	}
 }

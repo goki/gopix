@@ -15,6 +15,7 @@ import (
 	"github.com/goki/gi/gi"
 	"github.com/goki/gi/giv"
 	"github.com/goki/gopix/imgrid"
+	"github.com/goki/gopix/picinfo"
 	"github.com/goki/ki/dirs"
 	"github.com/goki/ki/ki"
 	"github.com/goki/ki/kit"
@@ -24,14 +25,16 @@ import (
 // PixView shows a picture viewer
 type PixView struct {
 	gi.Frame
-	ImageDir string              `desc:"directory with the images"`
-	Folder   string              `desc:"current folder"`
-	Files    giv.FileTree        `desc:"all the files in the project directory and subdirectories"`
-	Info     Pics                `desc:"info for all the pictures in current folder"`
-	AllInfo  map[string]*PicInfo `desc:"map of info for all files"`
-	AllMu    sync.Mutex          `desc:"mutex protecting AllInfo"`
-	Thumbs   []string            `view:"-" desc:"desc list of all thumb files in current folder -- sent to ImgGrid -- must be in 1-to-1 order with Info"`
-	WaitGp   sync.WaitGroup      `view:"-" desc:"wait group for synchronizing threaded layer calls"`
+	ImageDir    string                `desc:"directory with the images"`
+	Folder      string                `desc:"current folder"`
+	Folders     []string              `desc:"list of all folders, excluding All and Trash"`
+	FolderFiles []map[string]struct{} `desc:"list of all files in all Folders -- used for e.g., large renames"`
+	Files       giv.FileTree          `desc:"all the files in the project directory and subdirectories"`
+	Info        picinfo.Pics          `desc:"info for all the pictures in current folder"`
+	AllInfo     picinfo.PicMap        `desc:"map of info for all files"`
+	AllMu       sync.Mutex            `desc:"mutex protecting AllInfo"`
+	Thumbs      []string              `view:"-" desc:"desc list of all thumb files in current folder -- sent to ImgGrid -- must be in 1-to-1 order with Info"`
+	WaitGp      sync.WaitGroup        `view:"-" desc:"wait group for synchronizing threaded layer calls"`
 }
 
 var KiT_PixView = kit.Types.AddType(&PixView{}, PixViewProps)
@@ -43,21 +46,62 @@ func AddNewPixView(parent ki.Ki, name string) *PixView {
 
 // UpdateFiles updates the list of files saved in project
 func (pv *PixView) UpdateFiles() {
+	pv.UpdateFolders()
 	pv.Files.OpenPath(pv.ImageDir)
 	ft := pv.FileTreeView()
 	ft.SetFullReRender()
 	ft.UpdateSig()
 }
 
-// Config configures the widget
-func (pv *PixView) Config() {
+// UpdateFolders updates the list of current folders
+func (pv *PixView) UpdateFolders() {
+	pv.Folders = dirs.Dirs(pv.ImageDir)
+	nf := len(pv.Folders)
+	for i := nf - 1; i >= 0; i-- {
+		f := pv.Folders[i]
+		if f == "All" || f == "Trash" {
+			pv.Folders = append(pv.Folders[:i], pv.Folders[i+1:]...)
+		}
+	}
+}
+
+// GetFolderFiles gets a list of files for each folder
+// do this for operations that require this info
+func (pv *PixView) GetFolderFiles() {
+	pv.FolderFiles = make([]map[string]struct{}, len(pv.Folders))
+	for i, f := range pv.Folders {
+		fdir := filepath.Join(pv.ImageDir, f)
+		imgs, err := dirs.AllFiles(fdir)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		imgs = imgs[1:]
+		fmap := make(map[string]struct{}, len(imgs))
+		for _, img := range imgs {
+			fn := filepath.Base(img)
+			fmap[fn] = struct{}{}
+		}
+		pv.FolderFiles[i] = fmap
+	}
+}
+
+// Config configures the widget, with images at given path
+func (pv *PixView) Config(imgdir string) {
 	if pv.HasChildren() {
 		return
 	}
 	updt := pv.UpdateStart()
 	defer pv.UpdateEnd(updt)
 
+	pv.ImageDir = imgdir
 	pv.Folder = "All"
+
+	// do all file-level updating now
+	pv.UpdateFolders()
+	pv.UniquifyBaseNames()
+	pv.OpenAllInfo()
+
 	pv.Lay = gi.LayoutVert
 	pv.SetProp("spacing", gi.StdDialogVSpaceUnits)
 	gi.AddNewToolBar(pv, "toolbar")
@@ -76,6 +120,9 @@ func (pv *PixView) Config() {
 
 	pv.UpdateFiles()
 	ft.SetRootNode(&pv.Files)
+
+	pv.ConfigToolbar()
+
 	ft.TreeViewSig.Connect(pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
 		if data == nil {
 			return
@@ -238,6 +285,7 @@ var PixViewProps = ki.Props{
 		{"AppMenu", ki.BlankProp{}},
 		{"File", ki.PropSlice{
 			{"UpdateFiles", ki.Props{}},
+			{"RenameByDate", ki.Props{}},
 			{"sep-close", ki.BlankProp{}},
 			{"Close Window", ki.BlankProp{}},
 		}},
@@ -260,10 +308,8 @@ func GoPixViewWindow(path string) (*PixView, *gi.Window) {
 	mfr.Lay = gi.LayoutVert
 
 	pv := AddNewPixView(mfr, "pixview")
-	pv.ImageDir = path
 	pv.Viewport = vp
-	pv.OpenAllInfo()
-	pv.Config()
+	pv.Config(path)
 
 	mmen := win.MainMenu
 	giv.MainMenuView(pv, win, mmen)
@@ -312,6 +358,50 @@ func (pv *PixView) LinkToFolder(fnm string, files []string) {
 		err := os.Symlink(sf, lf)
 		if err != nil {
 			log.Println(err)
+		}
+	}
+}
+
+// todo: rename all files to date-stamp + uniq ext
+
+// RenameFile renames file in All and any folders where it might be linked
+// input is just the file name, no path
+func (pv *PixView) RenameFile(oldnm, newnm string) {
+	adir := filepath.Join(pv.ImageDir, "All")
+	aofn := filepath.Join(adir, oldnm)
+	anfn := filepath.Join(adir, newnm)
+	os.Rename(aofn, anfn)
+
+	sf := filepath.Join("../All", newnm)
+	for i, f := range pv.Folders {
+		fdir := filepath.Join(pv.ImageDir, f)
+		rename := false
+		if pv.FolderFiles != nil {
+			fmap := pv.FolderFiles[i]
+			_, rename = fmap[oldnm]
+		} else {
+			imgs, err := dirs.AllFiles(fdir)
+			if err != nil {
+				continue
+			}
+			imgs = imgs[1:]
+			for _, img := range imgs {
+				fn := filepath.Base(img)
+				if fn == oldnm {
+					rename = true
+					break
+				}
+			}
+		}
+		if rename {
+			err := os.Remove(filepath.Join(fdir, oldnm))
+			if err != nil {
+				log.Println(err)
+			}
+			err = os.Symlink(sf, filepath.Join(fdir, newnm))
+			if err != nil {
+				log.Println(err)
+			}
 		}
 	}
 }
