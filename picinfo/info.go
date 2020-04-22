@@ -16,6 +16,7 @@ import (
 type Info struct {
 	File      string            `json:"-" desc:"full path to image file name"`
 	Thumb     string            `json:"-" desc:"full path to thumb file name -- e.g., encoded as a .jpg"`
+	FileMod   time.Time         `desc:"date when image file was modified"`
 	Sup       filecat.Supported `desc:"supported type of image file, decoded from extension, using gopi/filecat system"`
 	Number    int               `desc:"if there are multiple files taken at the same time, e.g., in a Burst, this is the number"`
 	Size      image.Point       `desc:"size of image in raw pixels"`

@@ -102,63 +102,93 @@ func (pv *PixView) DirInfo() {
 }
 
 func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
-	dreg := image.Rect(5, 5, 100, 25)
 	tdir := pv.ThumbDir()
 	for i := st; i < ed; i++ {
 		if pv.Info[i] != nil {
-			continue
+			pi := pv.Info[i]
+			_, err := os.Stat(pi.Thumb)
+			if err == nil {
+				fst, err := os.Stat(pi.File)
+				if err != nil {
+					log.Printf("missing file %s: err: %s\n", pi.File, err)
+				} else {
+					if fst.ModTime() == pi.FileMod {
+						if !pi.DateTaken.IsZero() {
+							continue
+						}
+						fmt.Printf("redoing thumb to update date taken: %v\n", pi.File)
+						os.Remove(pi.Thumb)
+					}
+					// fmt.Printf("Image file updated: %s\n", pi.File)
+				}
+			}
+			pv.Info[i] = nil // regen
 		}
 		fn := filepath.Base(imgs[i])
-		fnext, _ := dirs.SplitExt(fn)
 		ffn := filepath.Join(fdir, fn)
-		tfn := filepath.Join(tdir, fnext+".jpg")
-		iffn, _ := os.Stat(ffn)
 		pi, err := picinfo.ReadExif(ffn)
 		if pi == nil {
 			fmt.Printf("failed exif: %v err: %v\n", fn, err)
 			continue
 		}
+		fnext, _ := dirs.SplitExt(fn)
+		tfn := filepath.Join(tdir, fnext+".jpg")
+		pi.Thumb = tfn
+
 		pv.AllMu.Lock()
 		pv.AllInfo[fn] = pi
 		pv.AllMu.Unlock()
 		pv.Info[i] = pi
-		ifn, err := os.Stat(tfn)
-		if err == nil {
-			pi.Thumb = tfn
-			if !ifn.ModTime().Before(iffn.ModTime()) {
-				continue
-			}
-		}
-		img, err := picinfo.OpenImage(ffn)
-		if err != nil {
-			continue
-		}
-		img = gi.ImageResizeMax(img, ThumbMaxSize)
-		img = picinfo.OrientImage(img, pi.Orient)
-		isz := img.Bounds().Size()
-		rgb := img.(*image.RGBA)
-		tr := &gi.TextRender{}
-		rs := &gi.RenderState{}
-		rs.Init(isz.X, isz.Y, rgb)
-		rs.Bounds.Max = isz
-		ds := pi.DateTaken.Format("2006:01:02")
-		avg := AvgImgGrey(rgb, dreg)
-		// fmt.Printf("img: %v  avg: %v\n", fn, avg)
-		if avg < .5 {
-			pv.Sty.Font.Color.SetUInt8(0xff, 0xff, 0xff, 0xff)
-		} else {
-			pv.Sty.Font.Color.SetUInt8(0, 0, 0, 0xff)
-		}
-		tr.SetString(ds, &pv.Sty.Font, &pv.Sty.UnContext, &pv.Sty.Text, true, 0, 1)
-		tr.RenderTopPos(rs, mat32.Vec2{5, 5})
 
-		err = gi.SaveImage(tfn, rgb)
+		err = pv.ThumbGenIfNeeded(pi)
 		if err != nil {
+			pi.Thumb = ""
 			log.Println(err)
 		}
-		pi.Thumb = tfn
 	}
 	pv.WaitGp.Done()
+}
+
+// ThumbGenIfNeeded generates a thumb file for given image file (picinfo.Info)
+// if the image file modification date is newer than the thumb image file date,
+// or thumb file does not exist.
+func (pv *PixView) ThumbGenIfNeeded(pi *picinfo.Info) error {
+	tst, err := os.Stat(pi.Thumb)
+	if err != nil {
+		return pv.ThumbGen(pi)
+	}
+	if tst.ModTime().Before(pi.FileMod) {
+		return pv.ThumbGen(pi)
+	}
+	return nil
+}
+
+// ThumbGen generates a thumb file for given image file (picinfo.Info)
+// and saves it in the Thumb file.
+func (pv *PixView) ThumbGen(pi *picinfo.Info) error {
+	img, err := picinfo.OpenImage(pi.File)
+	if err != nil {
+		return err
+	}
+	img = gi.ImageResizeMax(img, ThumbMaxSize)
+	img = picinfo.OrientImage(img, pi.Orient)
+	isz := img.Bounds().Size()
+	rgb := img.(*image.RGBA)
+	tr := &gi.TextRender{}
+	rs := &gi.RenderState{}
+	rs.Init(isz.X, isz.Y, rgb)
+	rs.Bounds.Max = isz
+	ds := pi.DateTaken.Format("2006:01:02")
+	avg := AvgImgGrey(rgb, image.Rect(5, 5, 100, 25))
+	if avg < .5 {
+		pv.Sty.Font.Color.SetUInt8(0xff, 0xff, 0xff, 0xff)
+	} else {
+		pv.Sty.Font.Color.SetUInt8(0, 0, 0, 0xff)
+	}
+	tr.SetString(ds, &pv.Sty.Font, &pv.Sty.UnContext, &pv.Sty.Text, true, 0, 1)
+	tr.RenderTopPos(rs, mat32.Vec2{5, 5})
+	err = picinfo.SaveImage(pi.Thumb, rgb)
+	return err
 }
 
 // OpenAllInfo open cached info on all pictures

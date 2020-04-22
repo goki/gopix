@@ -5,27 +5,34 @@
 package picinfo
 
 import (
+	"fmt"
 	"image"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"log"
 	"os"
 
-	"github.com/anthonynsimon/bild/imgio"
 	"github.com/anthonynsimon/bild/transform"
 	"github.com/goki/pi/filecat"
 	"github.com/jdeng/goheif"
+	"github.com/spakin/netpbm"
+	"golang.org/x/image/bmp"
+	"golang.org/x/image/tiff"
 )
 
-// OpenImage handles all image formats including jpeg or HEIC
-func OpenImage(fnm string) (image.Image, error) {
-	typ := filecat.SupportedFromFile(fnm)
+// OpenImage opens an image from given filename.
+// Supports: png, jpeg, tiff, gif, bmp, pgm, pbm, ppm, pnm, and heic formats.
+func OpenImage(fname string) (image.Image, error) {
+	typ := filecat.SupportedFromFile(fname)
 	// todo: deal with movies?
 	var img image.Image
 	var err error
 	switch typ {
 	case filecat.Heic:
-		img, err = OpenHEIC(fnm)
+		img, err = OpenHEIC(fname)
 	default:
-		img, err = imgio.Open(fnm)
+		img, err = OpenImageAuto(fname)
 	}
 	if err != nil {
 		log.Println(err)
@@ -33,9 +40,56 @@ func OpenImage(fnm string) (image.Image, error) {
 	return img, err
 }
 
+// OpenImageAuto opens an image from given filename.
+// Format is inferred automatically, using image package decoders registered.
+// Supports: png, jpeg, tiff, gif, bmp, pgm, pbm, ppm, pnm formats.
+func OpenImageAuto(fname string) (image.Image, error) {
+	file, err := os.Open(fname)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	im, _, err := image.Decode(file)
+	return im, err
+}
+
+// SaveImage saves image to file, with format inferred from filename.
+// Supports: png, jpeg, tiff, gif, bmp, pgm, pbm, ppm, pnm formats.
+// Uses standard default options -- use encoder for other options.
+func SaveImage(fname string, im image.Image) error {
+	file, err := os.Create(fname)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	typ := filecat.SupportedFromFile(fname)
+	switch typ {
+	case filecat.Png:
+		return png.Encode(file, im)
+	case filecat.Jpeg:
+		return jpeg.Encode(file, im, &jpeg.Options{Quality: 90})
+	case filecat.Tiff:
+		return tiff.Encode(file, im, &tiff.Options{Compression: tiff.Deflate}) // Deflate = ZIP = best
+	case filecat.Gif:
+		return gif.Encode(file, im, nil)
+	case filecat.Bmp:
+		return bmp.Encode(file, im)
+	case filecat.Pgm:
+		return netpbm.Encode(file, im, &netpbm.EncodeOptions{Format: netpbm.PGM})
+	case filecat.Pbm:
+		return netpbm.Encode(file, im, &netpbm.EncodeOptions{Format: netpbm.PBM})
+	case filecat.Ppm:
+		return netpbm.Encode(file, im, &netpbm.EncodeOptions{Format: netpbm.PPM})
+	case filecat.Pnm:
+		return netpbm.Encode(file, im, &netpbm.EncodeOptions{Format: netpbm.PNM})
+	default:
+		return fmt.Errorf("picinfo.SaveImage: file type: %s not supported", typ.String())
+	}
+}
+
 // OpenHEIC opens a HEIC formatted file
-func OpenHEIC(fnm string) (image.Image, error) {
-	f, err := os.Open(fnm)
+func OpenHEIC(fname string) (image.Image, error) {
+	f, err := os.Open(fname)
 	if err != nil {
 		return nil, err
 	}

@@ -14,6 +14,7 @@ import (
 
 	"github.com/goki/gi/gi"
 	"github.com/goki/gi/giv"
+	"github.com/goki/gi/oswin"
 	"github.com/goki/gopix/imgrid"
 	"github.com/goki/gopix/picinfo"
 	"github.com/goki/ki/dirs"
@@ -25,6 +26,7 @@ import (
 // PixView shows a picture viewer
 type PixView struct {
 	gi.Frame
+	CurFile     string                `desc:"current file -- viewed in Current bitmap or last selected in ImgGrid"`
 	ImageDir    string                `desc:"directory with the images"`
 	Folder      string                `desc:"current folder"`
 	Folders     []string              `desc:"list of all folders, excluding All and Trash"`
@@ -111,10 +113,16 @@ func (pv *PixView) Config(imgdir string) {
 	ft := ftfr.AddNewChild(KiT_FileTreeView, "filetree").(*FileTreeView)
 	ft.OpenDepth = 4
 
-	ig := imgrid.AddNewImgGrid(split, "imgrid")
+	tv := gi.AddNewTabView(split, "tabs")
+	tv.NoDeleteTabs = true
+
+	ig := tv.AddNewTab(imgrid.KiT_ImgGrid, "Images").(*imgrid.ImgGrid)
 	ig.ImageMax = ThumbMaxSize
 	ig.Config()
 	ig.InfoFunc = pv.FileInfo
+
+	pic := tv.AddNewTab(gi.KiT_Bitmap, "Current").(*gi.Bitmap)
+	pic.SetStretchMax()
 
 	split.SetSplits(.1, .9)
 
@@ -141,10 +149,23 @@ func (pv *PixView) Config(imgdir string) {
 			}
 		}
 	})
+	ig.WidgetSig.Connect(pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		if sig == int64(gi.WidgetSelected) {
+			pvv, _ := recv.Embed(KiT_PixView).(*PixView)
+			idx := data.(int)
+			if idx >= 0 && idx < len(pv.Info) {
+				fn := filepath.Base(pv.Info[idx].File)
+				pvv.CurFile = fn
+			}
+		}
+	})
 	ig.ImageSig.Connect(pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
 		// igg, _ := send.Embed(imgrid.KiT_ImgGrid).(*imgrid.ImgGrid)
 		pvv, _ := recv.Embed(KiT_PixView).(*PixView)
 		idx := data.(int)
+		if idx < 0 || idx >= len(pv.Info) {
+			return
+		}
 		fn := filepath.Base(pv.Info[idx].File)
 		switch imgrid.ImgGridSignals(sig) {
 		case imgrid.ImgGridDeleted:
@@ -163,9 +184,39 @@ func (pv *PixView) Config(imgdir string) {
 		// 	}
 		// 	pvv.PicInsertAt(idx, []string{""}) // todo: not really used or sensible
 		case imgrid.ImgGridDoubleClicked:
-			pvv.OpenFile(fn)
+			pvv.ViewFile(fn)
 		}
 	})
+}
+
+// SplitView returns the main SplitView
+func (pv *PixView) SplitView() *gi.SplitView {
+	return pv.ChildByName("splitview", 1).(*gi.SplitView)
+}
+
+// FileTreeView returns the main FileTreeView
+func (pv *PixView) FileTreeView() *FileTreeView {
+	return pv.SplitView().Child(0).Child(0).(*FileTreeView)
+}
+
+// Tabs returns the TabView
+func (pv *PixView) Tabs() *gi.TabView {
+	return pv.SplitView().Child(1).(*gi.TabView)
+}
+
+// ImgGrid returns the ImgGrid
+func (pv *PixView) ImgGrid() *imgrid.ImgGrid {
+	return pv.Tabs().TabByName("Images").(*imgrid.ImgGrid)
+}
+
+// CurBitmap returns the Bitmap for viewing the current file
+func (pv *PixView) CurBitmap() *gi.Bitmap {
+	return pv.Tabs().TabByName("Current").(*gi.Bitmap)
+}
+
+// ToolBar returns the toolbar widget
+func (pv *PixView) ToolBar() *gi.ToolBar {
+	return pv.ChildByName("toolbar", 0).(*gi.ToolBar)
 }
 
 // PicDeleteAt deletes image at given index
@@ -192,6 +243,7 @@ func (pv *PixView) PicDeleteAt(idx int) {
 func (pv *PixView) FileNodeSelected(fn *giv.FileNode, tvn *FileTreeView) {
 	if fn.IsDir() {
 		pv.Folder = fn.Nm
+		pv.Tabs().SelectTabByName("Images")
 		pv.DirInfo()
 	}
 }
@@ -200,7 +252,7 @@ func (pv *PixView) FileNodeSelected(fn *giv.FileNode, tvn *FileTreeView) {
 func (pv *PixView) FileNodeOpened(fn *giv.FileNode, tvn *FileTreeView) {
 	switch fn.Info.Cat {
 	case filecat.Folder:
-		if !fn.IsOpen() {
+		if !fn.IsOpen() && fn.Nm != "All" { // all is too big!
 			tvn.SetOpen()
 			fn.OpenDir()
 		}
@@ -230,26 +282,6 @@ func (pv *PixView) FileNodeClosed(fn *giv.FileNode, tvn *FileTreeView) {
 	}
 }
 
-// SplitView returns the main SplitView
-func (pv *PixView) SplitView() *gi.SplitView {
-	return pv.ChildByName("splitview", 1).(*gi.SplitView)
-}
-
-// FileTreeView returns the main FileTreeView
-func (pv *PixView) FileTreeView() *FileTreeView {
-	return pv.SplitView().Child(0).Child(0).(*FileTreeView)
-}
-
-// ImgGrid returns the ImgGrid
-func (pv *PixView) ImgGrid() *imgrid.ImgGrid {
-	return pv.SplitView().Child(1).(*imgrid.ImgGrid)
-}
-
-// ToolBar returns the toolbar widget
-func (pv *PixView) ToolBar() *gi.ToolBar {
-	return pv.ChildByName("toolbar", 0).(*gi.ToolBar)
-}
-
 // ConfigToolbar adds a PixView toolbar.
 func (pv *PixView) ConfigToolbar() {
 	tb := pv.ToolBar()
@@ -268,82 +300,6 @@ func (pv *PixView) Render2D() {
 		}
 	}
 	pv.Frame.Render2D()
-}
-
-var PixViewProps = ki.Props{
-	"EnumType:Flag":    gi.KiT_NodeFlags,
-	"background-color": &gi.Prefs.Colors.Background,
-	"color":            &gi.Prefs.Colors.Font,
-	"max-width":        -1,
-	"max-height":       -1,
-	"ToolBar": ki.PropSlice{
-		{"UpdateFiles", ki.Props{
-			"icon": "update",
-		}},
-	},
-	"MainMenu": ki.PropSlice{
-		{"AppMenu", ki.BlankProp{}},
-		{"File", ki.PropSlice{
-			{"UpdateFiles", ki.Props{}},
-			{"RenameByDate", ki.Props{}},
-			{"sep-close", ki.BlankProp{}},
-			{"Close Window", ki.BlankProp{}},
-		}},
-		{"Edit", "Copy Cut Paste Dupe"},
-		{"Window", "Windows"},
-	},
-}
-
-// GoPixViewWindow opens an interactive editor of the given Ki tree, at its
-// root, returns PixView and window
-func GoPixViewWindow(path string) (*PixView, *gi.Window) {
-	width := 1280
-	height := 920
-
-	win := gi.NewMainWindow("GoPix", "GoPix", width, height)
-	vp := win.WinViewport2D()
-	updt := vp.UpdateStart()
-
-	mfr := win.SetMainFrame()
-	mfr.Lay = gi.LayoutVert
-
-	pv := AddNewPixView(mfr, "pixview")
-	pv.Viewport = vp
-	pv.Config(path)
-
-	mmen := win.MainMenu
-	giv.MainMenuView(pv, win, mmen)
-
-	tb := pv.ToolBar()
-	tb.UpdateActions()
-
-	// inClosePrompt := false
-	// win.OSWin.SetCloseReqFunc(func(w oswin.Window) {
-	// 	// if !pv.Changed {
-	// 	// 	win.Close()
-	// 	// 	return
-	// 	// }
-	// 	if inClosePrompt {
-	// 		return
-	// 	}
-	// 	inClosePrompt = true
-	// 	gi.ChoiceDialog(vp, gi.DlgOpts{Title: "Close Without Saving?",
-	// 		Prompt: "Do you want to save your changes?  If so, Cancel and then Save"},
-	// 		[]string{"Close Without Saving", "Cancel"},
-	// 		win.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
-	// 			switch sig {
-	// 			case 0:
-	// 				win.Close()
-	// 			case 1:
-	// 				// default is to do nothing, i.e., cancel
-	// 				inClosePrompt = false
-	// 			}
-	// 		})
-	// })
-
-	vp.UpdateEndNoSig(updt)
-	win.GoStartEventLoop() // in a separate goroutine
-	return pv, win
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -465,17 +421,223 @@ func (pv *PixView) UntrashFiles(files []string) {
 	}
 }
 
-func (pv *PixView) OpenFile(file string) {
+// ViewFile views given file in the full-size bitmap view
+func (pv *PixView) ViewFile(fname string) {
+	pv.Tabs().SelectTabByName("Current")
+	bm := pv.CurBitmap()
+	pi, has := pv.AllInfo[fname]
+	if !has {
+		log.Printf("weird, no info for: %v\n", fname)
+		return
+	}
+	pv.CurFile = fname
+	img, err := picinfo.OpenImage(pi.File)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	img = picinfo.OrientImage(img, pi.Orient)
+	bm.SetImage(img, 0, 0)
+}
+
+// CheckCur checks that current file name is set and exists in AllInfo
+// returns false if not, and opens a prompt dialog
+func (pv *PixView) CheckCur() bool {
+	bad := false
+	if pv.CurFile == "" {
+		bad = true
+	}
+	if !bad {
+		_, has := pv.AllInfo[pv.CurFile]
+		bad = !has
+	}
+	if bad {
+		gi.PromptDialog(nil, gi.DlgOpts{Title: "No Current File", Prompt: "Please select a valid image file and retry"}, gi.AddOk, gi.NoCancel, nil, nil)
+		return false
+	}
+	return true
+}
+
+// OpenCurDefault opens the current file using the OS default open command
+func (pv *PixView) OpenCurDefault() {
+	if !pv.CheckCur() {
+		return
+	}
+	pv.OpenDefault(pv.CurFile)
+}
+
+// OpenDefault opens the given file using the OS default open command
+func (pv *PixView) OpenDefault(fname string) {
 	adir := filepath.Join(pv.ImageDir, "All")
-	afn := filepath.Join(adir, file)
+	afn := filepath.Join(adir, fname)
 	cstr := giv.OSOpenCommand()
 	cmd := exec.Command(cstr, afn)
 	out, _ := cmd.CombinedOutput()
 	fmt.Printf("%s\n", out)
 }
 
-// FileInfo shows info for given file index
+// OpenCurGimp opens the current file using gimp
+func (pv *PixView) OpenCurGimp() {
+	if !pv.CheckCur() {
+		return
+	}
+	pv.OpenGimp(pv.CurFile)
+}
+
+// OpenGimp opens the given file using gimp
+func (pv *PixView) OpenGimp(fname string) {
+	adir := filepath.Join(pv.ImageDir, "All")
+	afn := filepath.Join(adir, fname)
+	var cmd *exec.Cmd
+	if oswin.TheApp.Platform() == oswin.MacOS {
+		cmd = exec.Command("open", "-a", "Gimp", afn)
+	} else {
+		cmd = exec.Command("gimp", afn)
+	}
+	out, _ := cmd.CombinedOutput()
+	fmt.Printf("%s\n", out)
+}
+
+// InfoCur shows metadata info about current file
+func (pv *PixView) InfoCur() {
+	if !pv.CheckCur() {
+		return
+	}
+	pv.InfoFile(pv.CurFile)
+}
+
+// InfoFile shows metadata info about current file
+func (pv *PixView) InfoFile(fname string) {
+	pi, has := pv.AllInfo[fname]
+	if !has {
+		log.Printf("weird, no info for: %v\n", fname)
+		return
+	}
+	giv.StructViewDialog(pv.Viewport, pi, giv.DlgOpts{Title: "Picture Info: " + pi.File}, nil, nil)
+}
+
+// FileInfo shows info for given file index -- callback for ImgGrid
 func (pv *PixView) FileInfo(idx int) {
-	inf := pv.Info[idx]
-	giv.StructViewDialog(pv.Viewport, inf, giv.DlgOpts{Title: "Picture Info: " + inf.File}, nil, nil)
+	pi := pv.Info[idx]
+	giv.StructViewDialog(pv.Viewport, pi, giv.DlgOpts{Title: "Picture Info: " + pi.File}, nil, nil)
+}
+
+// MapCur shows GPS coordinates for current file on google maps
+func (pv *PixView) MapCur() {
+	if !pv.CheckCur() {
+		return
+	}
+	pv.MapFile(pv.CurFile)
+}
+
+// MapFile shows GPS coordinates for file on google maps
+func (pv *PixView) MapFile(fname string) {
+	pi, has := pv.AllInfo[fname]
+	if !has {
+		log.Printf("weird, no info for: %v\n", fname)
+		return
+	}
+	if pi.GPSLoc.Lat == 0 && pi.GPSLoc.Long == 0 {
+		gi.PromptDialog(nil, gi.DlgOpts{Title: "No GPS Location", Prompt: "That file does not have a GPS location"}, gi.AddOk, gi.NoCancel, nil, nil)
+		return
+	}
+	url := fmt.Sprintf("https://www.google.com/maps/search/?api=1&query=%g,%g", pi.GPSLoc.Lat, pi.GPSLoc.Long)
+	oswin.TheApp.OpenURL(url)
+}
+
+// GoPixViewWindow opens an interactive editor of the given Ki tree, at its
+// root, returns PixView and window
+func GoPixViewWindow(path string) (*PixView, *gi.Window) {
+	width := 1280
+	height := 920
+
+	win := gi.NewMainWindow("GoPix", "GoPix", width, height)
+	vp := win.WinViewport2D()
+	updt := vp.UpdateStart()
+
+	mfr := win.SetMainFrame()
+	mfr.Lay = gi.LayoutVert
+
+	pv := AddNewPixView(mfr, "pixview")
+	pv.Viewport = vp
+	pv.Config(path)
+
+	mmen := win.MainMenu
+	giv.MainMenuView(pv, win, mmen)
+
+	tb := pv.ToolBar()
+	tb.UpdateActions()
+
+	// inClosePrompt := false
+	// win.OSWin.SetCloseReqFunc(func(w oswin.Window) {
+	// 	// if !pv.Changed {
+	// 	// 	win.Close()
+	// 	// 	return
+	// 	// }
+	// 	if inClosePrompt {
+	// 		return
+	// 	}
+	// 	inClosePrompt = true
+	// 	gi.ChoiceDialog(vp, gi.DlgOpts{Title: "Close Without Saving?",
+	// 		Prompt: "Do you want to save your changes?  If so, Cancel and then Save"},
+	// 		[]string{"Close Without Saving", "Cancel"},
+	// 		win.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+	// 			switch sig {
+	// 			case 0:
+	// 				win.Close()
+	// 			case 1:
+	// 				// default is to do nothing, i.e., cancel
+	// 				inClosePrompt = false
+	// 			}
+	// 		})
+	// })
+
+	vp.UpdateEndNoSig(updt)
+	win.GoStartEventLoop() // in a separate goroutine
+	return pv, win
+}
+
+var PixViewProps = ki.Props{
+	"EnumType:Flag":    gi.KiT_NodeFlags,
+	"background-color": &gi.Prefs.Colors.Background,
+	"color":            &gi.Prefs.Colors.Font,
+	"max-width":        -1,
+	"max-height":       -1,
+	"ToolBar": ki.PropSlice{
+		{"UpdateFiles", ki.Props{
+			"icon":  "update",
+			"label": "Update Folders",
+		}},
+		{"OpenCurDefault", ki.Props{
+			"icon":  "file-open",
+			"desc":  "open current file (last selected) using OS default app",
+			"label": "Open",
+		}},
+		{"OpenCurGimp", ki.Props{
+			"icon":  "file-picture",
+			"desc":  "open current file (last selected) using Gimp image editor",
+			"label": "Gimp",
+		}},
+		{"InfoCur", ki.Props{
+			"icon":  "info",
+			"desc":  "show metadata info for current file (last selected)",
+			"label": "Info",
+		}},
+		{"MapCur", ki.Props{
+			"icon":  "info",
+			"desc":  "show GPS map info for current file (last selected), if available",
+			"label": "Map",
+		}},
+	},
+	"MainMenu": ki.PropSlice{
+		{"AppMenu", ki.BlankProp{}},
+		{"File", ki.PropSlice{
+			{"UpdateFiles", ki.Props{}},
+			{"RenameByDate", ki.Props{}},
+			{"sep-close", ki.BlankProp{}},
+			{"Close Window", ki.BlankProp{}},
+		}},
+		{"Edit", "Copy Cut Paste Dupe"},
+		{"Window", "Windows"},
+	},
 }

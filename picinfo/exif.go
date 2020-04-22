@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/dsoprea/go-exif/v2"
@@ -134,11 +135,21 @@ func ReadExif(fn string) (*Info, error) {
 	pi := &Info{File: fn}
 	pi.Defaults()
 
+	fnbase := filepath.Base(fn)
+
 	pi.Sup = filecat.SupportedFromFile(fn)
+
+	fst, err := os.Stat(fn)
+	if err != nil {
+		log.Println(err)
+		return pi, err
+	}
+	pi.FileMod = fst.ModTime()
+	pi.DateTaken = pi.FileMod // method of last resort
+	pi.DateMod = pi.FileMod
 
 	f, err := os.Open(fn)
 	defer f.Close()
-
 	if err != nil {
 		log.Println(err)
 		return pi, err
@@ -218,17 +229,20 @@ func ReadExif(fn string) (*Info, error) {
 		case "DateTimeOriginal":
 			dto, err = time.Parse("2006:01:02 15:04:05", e.ValueString)
 			if err != nil {
-				log.Println(err)
+				log.Printf("File: %s err: %v\n", fnbase, err)
+				dto = time.Time{}
 			}
 		case "DateTimeDigitized":
 			dtd, err = time.Parse("2006:01:02 15:04:05", e.ValueString)
 			if err != nil {
-				log.Println(err)
+				log.Printf("File: %s err: %v\n", fnbase, err)
+				dtd = time.Time{}
 			}
 		case "DateTime":
 			dtp, err = time.Parse("2006:01:02 15:04:05", e.ValueString)
 			if err != nil {
-				log.Println(err)
+				log.Printf("File: %s err: %v\n", fnbase, err)
+				dtp = time.Time{}
 			}
 		case "ImageNumber":
 			pi.Number = e.ToInt()
@@ -290,9 +304,11 @@ func ReadExif(fn string) (*Info, error) {
 		case "GPSSpeedRef":
 			pi.GPSLoc.SpeedRef = e.ValueString
 		case "GPSDateStamp":
-			pi.GPSDate, err = time.Parse("2006:01:02", e.ValueString)
+			gpd, err := time.Parse("2006:01:02", e.ValueString)
 			if err != nil {
-				log.Println(err)
+				log.Printf("File: %s err: %v\n", fnbase, err)
+			} else {
+				pi.GPSDate = gpd
 			}
 		case "GPSTimeStamp":
 			gpstime = e.ToFloats()
@@ -312,6 +328,8 @@ func ReadExif(fn string) (*Info, error) {
 	}
 	if !dtp.IsZero() && pi.DateTaken != dtp {
 		pi.DateMod = dtp
+	} else {
+		pi.DateMod = pi.DateTaken
 	}
 	if lat[3] != 0 {
 		lat[0] *= lat[3]
@@ -325,9 +343,6 @@ func ReadExif(fn string) (*Info, error) {
 	}
 	pi.GPSLoc.Lat = DecDegFromDMS(lat[0], lat[1], lat[2])
 	pi.GPSLoc.Long = DecDegFromDMS(long[0], long[1], long[2])
-	if pi.DateMod.IsZero() {
-		pi.DateMod = pi.DateTaken
-	}
 	if gpstime != nil {
 		durf := gpstime[0]*3600 + gpstime[1]*60 + gpstime[2]
 		pi.GPSDate.Add(time.Duration(durf))
