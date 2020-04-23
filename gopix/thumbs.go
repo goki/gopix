@@ -41,8 +41,9 @@ func (pv *PixView) InfoClean() {
 	}
 }
 
-// DirInfo updates Info and thumbnails based on current folder
-func (pv *PixView) DirInfo() {
+// DirInfo updates Info and thumbnails based on current folder.
+// If reset, reset selections (e.g., when going to a new folder)
+func (pv *PixView) DirInfo(reset bool) {
 	fdir := filepath.Join(pv.ImageDir, pv.Folder)
 	tdir := pv.ThumbDir()
 	os.MkdirAll(tdir, 0775)
@@ -97,7 +98,7 @@ func (pv *PixView) DirInfo() {
 	pv.Thumbs = pv.Info.Thumbs()
 	go pv.SaveAllInfo()
 	ig := pv.ImgGrid()
-	ig.SetImages(pv.Thumbs)
+	ig.SetImages(pv.Thumbs, reset)
 	// fmt.Printf("done\n")
 }
 
@@ -353,6 +354,6 @@ func (pv *PixView) RenameByDate() {
 	}
 	fmt.Println("...Done\n")
 	gi.PromptDialog(nil, gi.DlgOpts{Title: "Done", Prompt: "Done Renaming by Date"}, gi.AddOk, gi.NoCancel, nil, nil)
-	pv.DirInfo()
+	pv.DirInfo(false)
 	return
 }

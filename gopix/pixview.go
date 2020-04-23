@@ -119,7 +119,7 @@ func (pv *PixView) Config(imgdir string) {
 
 	ig := tv.AddNewTab(imgrid.KiT_ImgGrid, "Images").(*imgrid.ImgGrid)
 	ig.ImageMax = ThumbMaxSize
-	ig.Config()
+	ig.Config(true)
 	ig.InfoFunc = pv.FileInfo
 
 	pic := tv.AddNewTab(gi.KiT_Bitmap, "Current").(*gi.Bitmap)
@@ -255,7 +255,7 @@ func (pv *PixView) FileNodeSelected(fn *giv.FileNode, tvn *FileTreeView) {
 	if fn.IsDir() {
 		pv.Folder = fn.Nm
 		pv.Tabs().SelectTabByName("Images")
-		pv.DirInfo()
+		pv.DirInfo(true) // reset
 	}
 }
 
@@ -569,7 +569,7 @@ func (pv *PixView) SaveExifSel() {
 		pv.SaveExifFile(pi)
 	}
 	pv.FolderFiles = nil
-	pv.DirInfo() // update -- also saves updated info
+	pv.DirInfo(false) // update -- also saves updated info
 }
 
 // RenameAsJpeg renames given file as a Jpeg file instead of whatever it was originally.
@@ -638,7 +638,7 @@ func (pv *PixView) RotateSel(deg float32) {
 		pv.RotateImage(pi, deg)
 	}
 	pv.FolderFiles = nil
-	pv.DirInfo() // update -- also saves updated info
+	pv.DirInfo(false) // update -- also saves updated info
 }
 
 // RotateImage rotates image by given number of degrees (+ = right, - = left).

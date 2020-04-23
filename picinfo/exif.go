@@ -377,6 +377,12 @@ func RawExifToInfo(pi *Info, rawExif []byte) {
 		case "GPSTimeStamp":
 			gpstime = e.ToFloats()
 		case "ComponentsConfiguration":
+		case "UserComment": // usu not useful and long.
+		case "MakerNote":
+		case "InteroperabilityIndex":
+		case "InteroperabilityVersion":
+		case "ExifTag":
+		case "ExifVersion":
 		default:
 			pi.Tags[e.TagName] = e.ValueString
 		}

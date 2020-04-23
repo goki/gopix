@@ -9,6 +9,7 @@ import (
 	"image"
 	"sort"
 
+	"github.com/chewxy/math32"
 	"github.com/goki/gi/gi"
 	"github.com/goki/gi/oswin"
 	"github.com/goki/gi/oswin/dnd"
@@ -48,10 +49,10 @@ func AddNewImgGrid(parent ki.Ki, name string) *ImgGrid {
 }
 
 // SetImages sets the current image files to view (makes a copy of slice),
-// and does a config rebuild
-func (ig *ImgGrid) SetImages(files []string) {
+// and does a config rebuild.  If reset, then reset selections, else not
+func (ig *ImgGrid) SetImages(files []string, reset bool) {
 	ig.Images = sliceclone.String(files)
-	ig.Config()
+	ig.Config(reset)
 }
 
 func (ig *ImgGrid) NumImages() int {
@@ -59,11 +60,16 @@ func (ig *ImgGrid) NumImages() int {
 }
 
 // Config configures the grid
-func (ig *ImgGrid) Config() {
+func (ig *ImgGrid) Config(reset bool) {
 	updt := ig.UpdateStart()
 	defer ig.UpdateEnd(updt)
 	ig.SetFullReRender()
 	ig.SetCanFocus()
+
+	if reset {
+		ig.ResetSelectedIdxs()
+		ig.SelectedIdx = 0
+	}
 
 	if !ig.HasChildren() {
 		ig.Lay = gi.LayoutHoriz
@@ -77,8 +83,6 @@ func (ig *ImgGrid) Config() {
 			}
 		})
 	}
-	ig.ResetSelectedIdxs()
-	ig.SelectedIdx = 0
 	gr := ig.Grid()
 	sb := ig.ScrollBar()
 	if ig.Size.X == 0 {
@@ -99,7 +103,9 @@ func (ig *ImgGrid) Config() {
 	sb.Min = 0
 	sb.Tracking = true
 	sb.Dim = mat32.Y
-	sb.Value = 0
+	if reset {
+		sb.Value = 0
+	}
 	sb.SetFixedWidth(units.NewPx(gi.ScrollBarWidthDefault))
 	sb.SetStretchMaxHeight()
 	ig.SetScrollMax()
@@ -113,6 +119,7 @@ func (ig *ImgGrid) SetScrollMax() int {
 	nr = ints.MaxInt(nr, ig.Size.Y)
 	sb.Max = float32(nr)
 	sb.ThumbVal = float32(ig.Size.Y)
+	sb.Value = math32.Min(sb.Max-1, sb.Value)
 	return nr
 }
 
