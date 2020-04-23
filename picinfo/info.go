@@ -15,7 +15,7 @@ import (
 // Info is the information about a picture / video file
 type Info struct {
 	File      string            `json:"-" desc:"full path to image file name"`
-	Thumb     string            `json:"-" desc:"full path to thumb file name -- e.g., encoded as a .jpg"`
+	Desc      string            `desc:"image description -- can contain arbitrary user comments -- ascii encoded"`
 	FileMod   time.Time         `desc:"date when image file was modified"`
 	Sup       filecat.Supported `desc:"supported type of image file, decoded from extension, using gopi/filecat system"`
 	Number    int               `desc:"if there are multiple files taken at the same time, e.g., in a Burst, this is the number"`
@@ -28,6 +28,7 @@ type Info struct {
 	GPSDate   time.Time         `desc:"GPS version of the time"`
 	Exposure  Exposure          `desc:"standard exposure info"`
 	Tags      map[string]string `desc:"full set of name / value tags"`
+	Thumb     string            `json:"-" view:"-" desc:"full path to thumb file name -- e.g., encoded as a .jpg"`
 }
 
 func (inf *Info) Defaults() {
@@ -77,6 +78,50 @@ var KiT_Orientations = kit.Enums.AddEnum(OrientationsN, kit.NotBitFlag, nil)
 
 func (ev Orientations) MarshalJSON() ([]byte, error)  { return kit.EnumMarshalJSON(ev) }
 func (ev *Orientations) UnmarshalJSON(b []byte) error { return kit.EnumUnmarshalJSON(ev, b) }
+
+// Rotate returns orientation updated with given +/-90 or 180 degree rotation.
+// In general, it goes the opposite of the name as that is what is done to compensate.
+func (or Orientations) Rotate(deg int) Orientations {
+	switch or {
+	case NoOrient, Rotated0, OrientUndef:
+		switch deg {
+		case 90:
+			return Rotated90L
+		case -90:
+			return Rotated90R
+		case 180:
+			return Rotated180
+		}
+	case Rotated90L:
+		switch deg {
+		case 90:
+			return Rotated180
+		case -90:
+			return Rotated0
+		case 180:
+			return Rotated90R
+		}
+	case Rotated90R:
+		switch deg {
+		case 90:
+			return Rotated0
+		case -90:
+			return Rotated180
+		case 180:
+			return Rotated90L
+		}
+	case Rotated180:
+		switch deg {
+		case 90:
+			return Rotated90R
+		case -90:
+			return Rotated90L
+		case 180:
+			return Rotated0
+		}
+	}
+	return or
+}
 
 // GPSCoord is a GPS position as decimal degrees
 type GPSCoord struct {

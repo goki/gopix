@@ -5,7 +5,12 @@
 package picinfo
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
+	"image"
+	"image/jpeg"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -14,7 +19,9 @@ import (
 
 	"github.com/dsoprea/go-exif/v2"
 	exifcommon "github.com/dsoprea/go-exif/v2/common"
+	jpegstructure "github.com/dsoprea/go-jpeg-image-structure"
 	"github.com/goki/pi/filecat"
+	"github.com/jdeng/goheif"
 )
 
 // reference for all defined tags:
@@ -130,46 +137,101 @@ func (e *IfdEntry) ToFloats() []float64 {
 	return rf
 }
 
-// ReadExif reads the exif info for given file, which should be full path to file
-func ReadExif(fn string) (*Info, error) {
-	pi := &Info{File: fn}
-	pi.Defaults()
-
-	fnbase := filepath.Base(fn)
-
-	pi.Sup = filecat.SupportedFromFile(fn)
-
-	fst, err := os.Stat(fn)
-	if err != nil {
-		log.Println(err)
-		return pi, err
-	}
-	pi.FileMod = fst.ModTime()
-	pi.DateTaken = pi.FileMod // method of last resort
-	pi.DateMod = pi.FileMod
-
+// OpenBytes opens file and returns bytes
+func OpenBytes(fn string) ([]byte, error) {
 	f, err := os.Open(fn)
 	defer f.Close()
 	if err != nil {
-		log.Println(err)
-		return pi, err
+		return nil, err
 	}
-	data, err := ioutil.ReadAll(f)
-	if err != nil {
-		log.Println(err)
-		return pi, err
-	}
-	rawExif, err := exif.SearchAndExtractExif(data)
-	if err != nil {
-		if err == exif.ErrNoExif {
-			// log.Println(err)
-			return pi, err
-		}
-		log.Println(err)
-		return pi, err
-	}
+	return ioutil.ReadAll(f)
+}
 
-	// Run the parse.
+// OpenExif opens file and reads the exif info for given file
+func OpenExif(fn string) (*Info, error) {
+	rawExif, err := OpenRawExif(fn)
+	if err != nil && err != exif.ErrNoExif {
+		log.Println(err)
+		return nil, err
+	}
+	pi, err := InitInfoFromFile(fn)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	RawExifToInfo(pi, rawExif)
+	return pi, err
+}
+
+// InitInfoFromFile returns a new Info initialized with basic info from file
+func InitInfoFromFile(fn string) (*Info, error) {
+	pi := &Info{File: fn}
+	pi.Defaults()
+	pi.Sup = filecat.SupportedFromFile(fn)
+	fst, err := os.Stat(fn)
+	if err == nil {
+		pi.FileMod = fst.ModTime()
+	}
+	pi.DateTaken = pi.FileMod // method of last resort
+	pi.DateMod = pi.FileMod
+	return pi, err
+}
+
+// OpenRawExif opens the raw exif data bytes from given file.
+// if Jpeg or Heic, it returns the exact correct raw bytes --
+// otherwise it is the *entire file* and not suitable for re-writing.
+func OpenRawExif(fn string) ([]byte, error) {
+	sup := filecat.SupportedFromFile(fn)
+	switch sup {
+	case filecat.Heic:
+		f, err := os.Open(fn)
+		defer f.Close()
+		if err != nil {
+			return nil, err
+		}
+		return goheif.ExtractExif(f)
+	case filecat.Jpeg:
+		data, err := OpenBytes(fn)
+		if err != nil {
+			return nil, err
+		}
+		jmp := jpegstructure.NewJpegMediaParser()
+		intfc, err := jmp.ParseBytes(data)
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		sl := intfc.(*jpegstructure.SegmentList)
+		_, s, err := sl.FindExif()
+		if err == exif.ErrNoExif {
+			return nil, nil
+		}
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		_, rawExif, err := s.Exif()
+		if err != nil {
+			log.Println(err)
+			return nil, err
+		}
+		return rawExif, err
+	default:
+		data, err := OpenBytes(fn)
+		if err != nil {
+			return nil, err
+		}
+		return exif.SearchAndExtractExif(data)
+	}
+}
+
+// RawExifToInfo parses the raw Exif data into our Info structure
+func RawExifToInfo(pi *Info, rawExif []byte) {
+	if rawExif == nil {
+		return
+	}
+	fnbase := filepath.Base(pi.File)
+
 	im := exif.NewIfdMappingWithStandard()
 	ti := exif.NewTagIndex()
 
@@ -215,7 +277,7 @@ func ReadExif(fn string) (*Info, error) {
 		entries = append(entries, entry)
 		return nil
 	}
-	_, err = exif.Visit(exifcommon.IfdStandard, im, ti, rawExif, visitor)
+	_, err := exif.Visit(exifcommon.IfdStandard, im, ti, rawExif, visitor)
 	lat := [4]float64{}
 	long := [4]float64{}
 	var gpstime []float64
@@ -254,6 +316,8 @@ func ReadExif(fn string) (*Info, error) {
 			pi.Depth = e.ToInt()
 		case "Orientation":
 			pi.Orient = Orientations(e.ToInt())
+		case "ImageDescription":
+			pi.Desc = e.ValueString
 		case "ExposureTime":
 			pi.Exposure.Time = e.ToFloat()
 		case "ISOSpeedRatings":
@@ -312,8 +376,6 @@ func ReadExif(fn string) (*Info, error) {
 			}
 		case "GPSTimeStamp":
 			gpstime = e.ToFloats()
-		case "MakerNote":
-		case "UserComment":
 		case "ComponentsConfiguration":
 		default:
 			pi.Tags[e.TagName] = e.ValueString
@@ -347,5 +409,272 @@ func ReadExif(fn string) (*Info, error) {
 		durf := gpstime[0]*3600 + gpstime[1]*60 + gpstime[2]
 		pi.GPSDate.Add(time.Duration(durf))
 	}
-	return pi, nil
+}
+
+func intToLong(val int) []uint32 {
+	return []uint32{uint32(val)}
+}
+
+func intToShort(val int) []uint16 {
+	return []uint16{uint16(val)}
+}
+
+// UpdateExif reads the exif from file, and generates a new exif incorporating
+// changes from given Info.  if rootIfd != nil it is used as a starting point
+// otherwise it is generated from the rawExif, which also can be nil if starting fresh.
+// returns true if data was different and requires saving.
+func UpdateExif(pi *Info, rawExif []byte, rootIfd *exif.Ifd) (*exif.IfdBuilder, bool, error) {
+	ci, err := InitInfoFromFile(pi.File)
+	RawExifToInfo(ci, rawExif)
+
+	if rootIfd == nil && rawExif != nil {
+		im := exif.NewIfdMappingWithStandard()
+		ti := exif.NewTagIndex()
+		_, index, err := exif.Collect(im, ti, rawExif)
+		if err != nil {
+			return nil, false, err
+		}
+		rootIfd = index.RootIfd
+	}
+
+	var ib *exif.IfdBuilder
+	if rootIfd != nil {
+		ib = exif.NewIfdBuilderFromExistingChain(rootIfd)
+	} else {
+		im := exif.NewIfdMappingWithStandard()
+		ti := exif.NewTagIndex()
+		ib = exif.NewIfdBuilder(im, ti, exifcommon.IfdPathStandard, binary.BigEndian)
+	}
+
+	ifchld, err := exif.GetOrCreateIbFromRootIb(ib, "IFD")
+	if err != nil {
+		log.Printf("create path %s err: %s\n", "IFD", err)
+	}
+	exchld, err := exif.GetOrCreateIbFromRootIb(ib, "IFD/Exif")
+	if err != nil {
+		log.Printf("create path %s err: %s\n", "IFD/Exif", err)
+	}
+
+	updt := false
+	if ci.DateTaken != pi.DateTaken {
+		err = ifchld.SetStandardWithName("DateTimeOriginal", exif.ExifFullTimestampString(pi.DateTaken))
+		if err != nil {
+			log.Printf("date set err: %s\n", err)
+		}
+		updt = true
+	}
+	if ci.Number != pi.Number {
+		err = ifchld.SetStandardWithName("ImageNumber", intToLong(pi.Number))
+		if err != nil {
+			log.Printf("number set err: %s\n", err)
+		}
+		updt = true
+	}
+	if ci.Size.Y != pi.Size.Y {
+		err = exchld.SetStandardWithName("PixelYDimension", intToLong(pi.Size.Y))
+		if err != nil {
+			log.Printf("pix set err: %s\n", err)
+		}
+		updt = true
+	}
+	if ci.Size.X != pi.Size.X {
+		err = exchld.SetStandardWithName("PixelXDimension", intToLong(pi.Size.X))
+		if err != nil {
+			log.Printf("pix set err: %s\n", err)
+		}
+		updt = true
+	}
+	if ci.Orient != pi.Orient {
+		err = ifchld.SetStandardWithName("Orientation", intToShort(int(pi.Orient)))
+		if err != nil {
+			log.Printf("orient set err: %s\n", err)
+		}
+		updt = true
+	}
+	if ci.Desc != pi.Desc {
+		err = ifchld.SetStandardWithName("ImageDescription", pi.Desc)
+		if err != nil {
+			log.Printf("desc set err: %s\n", err)
+		}
+		updt = true
+	}
+	// if ci.GPSLoc.Lat != pi.GPSLoc.Lat {
+	// 	childIb.SetStandardWithName("Orientation", uint16(pi.Orient))
+	// 	updt = true
+	// }
+	//
+	if updt {
+		pi.DateMod = time.Now()
+		err = ifchld.SetStandardWithName("DateTime", exif.ExifFullTimestampString(pi.DateMod))
+		if err != nil {
+			log.Printf("datetime set err: %s\n", err)
+		}
+	}
+	return ib, updt, err
+}
+
+// SaveUpdatedJpeg saves a new Jpeg encoded file with info updated to reflect given info
+func SaveUpdatedJpeg(pi *Info) error {
+	data, err := OpenBytes(pi.File)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	jmp := jpegstructure.NewJpegMediaParser()
+	intfc, err := jmp.ParseBytes(data)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	sl := intfc.(*jpegstructure.SegmentList)
+	_, s, err := sl.FindExif()
+	if err != nil && err != exif.ErrNoExif {
+		log.Println(err)
+		return err
+	}
+	var rootIfd *exif.Ifd
+	var rawExif []byte
+	if s != nil {
+		rootIfd, rawExif, err = s.Exif()
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+	}
+	if pi.Size == image.ZP {
+		img, err := jpeg.Decode(bytes.NewBuffer(data))
+		if err == nil {
+			pi.Size = img.Bounds().Size()
+		}
+	}
+
+	ib, updt, err := UpdateExif(pi, rawExif, rootIfd)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	if !updt {
+		fmt.Printf("File: %s had no updates to Exif data\n", pi.File)
+		return nil
+	}
+	sl.SetExif(ib)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	f, err := os.Create(pi.File)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	err = sl.Write(f)
+	f.Close()
+	return nil
+}
+
+// SaveJpegImageInfo saves a new Jpeg encoded file with exif data generated from current info
+func SaveJpegImageInfo(pi *Info, img image.Image) error {
+	ib, _, err := UpdateExif(pi, nil, nil)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	ibe := exif.NewIfdByteEncoder()
+	exifData, err := ibe.EncodeToExif(ib)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+
+	return SaveJpegImageExif(pi, exifData, img)
+}
+
+// AddExifPrefix adds the standard Exif00 prefix to given encoded exif data
+// if not already present
+func AddExifPrefix(exifData []byte) []byte {
+	pfx := jpegstructure.ExifPrefix
+	pl := len(pfx)
+	if len(exifData) >= pl && bytes.Equal(exifData[:pl], pfx) {
+		return exifData
+	}
+	rawExif := make([]byte, pl+len(exifData))
+	copy(rawExif, pfx)
+	copy(rawExif[pl:], exifData)
+	return rawExif
+}
+
+// SaveJpegImageExif saves a new Jpeg encoded file with given raw bytes of exif data
+// Note: rawExif does NOT have to have the standard Exif00 prefix already -- will be added
+func SaveJpegImageExif(pi *Info, rawExif []byte, img image.Image) error {
+	f, err := os.Create(pi.File)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	defer f.Close()
+
+	rawExif = AddExifPrefix(rawExif)
+
+	w, _ := newWriterExif(f, rawExif)
+	err = jpeg.Encode(w, img, &jpeg.Options{Quality: JpegEncodeQuality})
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
+}
+
+// Skip Writer for exif writing -- used to skip over the 2 byte magic number
+// that the default jpeg.Encode will try to write to the file, so we can
+// append our own magic number at the start..
+// from github.com/jdeng/goheif/heic2jpg
+type writerSkipper struct {
+	w           io.Writer
+	bytesToSkip int
+}
+
+func (w *writerSkipper) Write(data []byte) (int, error) {
+	if w.bytesToSkip <= 0 {
+		return w.w.Write(data)
+	}
+
+	if dataLen := len(data); dataLen < w.bytesToSkip {
+		w.bytesToSkip -= dataLen
+		return dataLen, nil
+	}
+
+	if n, err := w.w.Write(data[w.bytesToSkip:]); err == nil {
+		n += w.bytesToSkip
+		w.bytesToSkip = 0
+		return n, nil
+	} else {
+		return n, err
+	}
+}
+
+func newWriterExif(w io.Writer, exif []byte) (io.Writer, error) {
+	writer := &writerSkipper{w, 2}
+	soi := []byte{0xff, 0xd8}
+	if _, err := w.Write(soi); err != nil {
+		return nil, err
+	}
+
+	if exif != nil {
+		app1Marker := 0xe1
+		marker := []byte{0xff, uint8(app1Marker)}
+		if _, err := w.Write(marker); err != nil {
+			return nil, err
+		}
+		len_ := uint16(len(exif) + 2)
+		binary.Write(w, binary.BigEndian, &len_)
+
+		if _, err := w.Write(exif); err != nil {
+			return nil, err
+		}
+	}
+
+	return writer, nil
 }

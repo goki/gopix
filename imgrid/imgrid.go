@@ -642,6 +642,8 @@ func (ig *ImgGrid) SelectIdxAction(idx int, mode mouse.SelectModes) {
 		idx = 0
 	}
 	// row := idx - sv.StartIdx // note: could be out of bounds
+	wupdt := ig.TopUpdateStart()
+	defer ig.TopUpdateEnd(wupdt)
 	switch mode {
 	case mouse.SelectOne:
 		if ig.IdxIsSelected(idx) {

@@ -21,6 +21,9 @@ import (
 	"golang.org/x/image/tiff"
 )
 
+// JpegEncodeQuality is the default encoding quality for Jpeg files
+var JpegEncodeQuality = 90
+
 // OpenImage opens an image from given filename.
 // Supports: png, jpeg, tiff, gif, bmp, pgm, pbm, ppm, pnm, and heic formats.
 func OpenImage(fname string) (image.Image, error) {
@@ -67,7 +70,7 @@ func SaveImage(fname string, im image.Image) error {
 	case filecat.Png:
 		return png.Encode(file, im)
 	case filecat.Jpeg:
-		return jpeg.Encode(file, im, &jpeg.Options{Quality: 90})
+		return jpeg.Encode(file, im, &jpeg.Options{Quality: JpegEncodeQuality})
 	case filecat.Tiff:
 		return tiff.Encode(file, im, &tiff.Options{Compression: tiff.Deflate}) // Deflate = ZIP = best
 	case filecat.Gif:

@@ -19,9 +19,9 @@ Go picture management app, because Mac Photos bricked my entire photo library up
 
 # TODO
 
-* first pass read from AllInfo map in one thread, then parallel fill in rest -- lock contention highly inefficient
+* shift-select in imggrid needs top-level updt
 
-* rotate images
+* rotate images -- just change orientation flag and update exif for .jpg and .tiff images
 
-* write modified image with exif intact
+* need to be able to write exif!  see heic example.
 

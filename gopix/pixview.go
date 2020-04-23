@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sync"
 
+	"github.com/anthonynsimon/bild/transform"
 	"github.com/goki/gi/gi"
 	"github.com/goki/gi/giv"
 	"github.com/goki/gi/oswin"
@@ -225,6 +226,16 @@ func (pv *PixView) PicDeleteAt(idx int) {
 	pv.Thumbs = append(pv.Thumbs[:idx], pv.Thumbs[idx+1:]...)
 }
 
+// PicIdxByName returns the index in current Info of given file
+func (pv *PixView) PicIdxByName(fname string) int {
+	for i, pi := range pv.Info {
+		if pi.File == fname {
+			return i
+		}
+	}
+	return -1
+}
+
 // PicInsertAt inserts image(s) at given index
 // func (pv *PixView) PicInsertAt(idx int, files []string) {
 // 	ni := len(files)
@@ -317,8 +328,6 @@ func (pv *PixView) LinkToFolder(fnm string, files []string) {
 		}
 	}
 }
-
-// todo: rename all files to date-stamp + uniq ext
 
 // RenameFile renames file in All and any folders where it might be linked
 // input is just the file name, no path
@@ -441,58 +450,69 @@ func (pv *PixView) ViewFile(fname string) {
 }
 
 // CheckCur checks that current file name is set and exists in AllInfo
-// returns false if not, and opens a prompt dialog
-func (pv *PixView) CheckCur() bool {
-	bad := false
-	if pv.CurFile == "" {
-		bad = true
-	}
-	if !bad {
-		_, has := pv.AllInfo[pv.CurFile]
-		bad = !has
-	}
-	if bad {
+// returns nil if not, and opens a prompt dialog
+func (pv *PixView) CheckCur() *picinfo.Info {
+	pi, has := pv.AllInfo[pv.CurFile]
+	if !has {
 		gi.PromptDialog(nil, gi.DlgOpts{Title: "No Current File", Prompt: "Please select a valid image file and retry"}, gi.AddOk, gi.NoCancel, nil, nil)
-		return false
+		return nil
 	}
-	return true
+	return pi
+}
+
+// CheckSel checks for and returns selected files from img grid.
+// Prompts if none and no CurFile either (and returns nil in this case)
+func (pv *PixView) CheckSel() []*picinfo.Info {
+	ig := pv.ImgGrid()
+	si := ig.SelectedIdxsList(false)
+	n := len(si)
+	if n == 0 {
+		pi := pv.CheckCur()
+		if pi == nil {
+			return nil
+		}
+		return []*picinfo.Info{pi}
+	}
+	pis := make([]*picinfo.Info, n)
+	for i, fi := range si {
+		pis[i] = pv.Info[fi]
+	}
+	return pis
 }
 
 // OpenCurDefault opens the current file using the OS default open command
 func (pv *PixView) OpenCurDefault() {
-	if !pv.CheckCur() {
+	pi := pv.CheckCur()
+	if pi == nil {
 		return
 	}
-	pv.OpenDefault(pv.CurFile)
+	pv.OpenDefault(pi)
 }
 
 // OpenDefault opens the given file using the OS default open command
-func (pv *PixView) OpenDefault(fname string) {
-	adir := filepath.Join(pv.ImageDir, "All")
-	afn := filepath.Join(adir, fname)
+func (pv *PixView) OpenDefault(pi *picinfo.Info) {
 	cstr := giv.OSOpenCommand()
-	cmd := exec.Command(cstr, afn)
+	cmd := exec.Command(cstr, pi.File)
 	out, _ := cmd.CombinedOutput()
 	fmt.Printf("%s\n", out)
 }
 
 // OpenCurGimp opens the current file using gimp
 func (pv *PixView) OpenCurGimp() {
-	if !pv.CheckCur() {
+	pi := pv.CheckCur()
+	if pi == nil {
 		return
 	}
-	pv.OpenGimp(pv.CurFile)
+	pv.OpenGimp(pi)
 }
 
 // OpenGimp opens the given file using gimp
-func (pv *PixView) OpenGimp(fname string) {
-	adir := filepath.Join(pv.ImageDir, "All")
-	afn := filepath.Join(adir, fname)
+func (pv *PixView) OpenGimp(pi *picinfo.Info) {
 	var cmd *exec.Cmd
 	if oswin.TheApp.Platform() == oswin.MacOS {
-		cmd = exec.Command("open", "-a", "Gimp", afn)
+		cmd = exec.Command("open", "-a", "Gimp", pi.File)
 	} else {
-		cmd = exec.Command("gimp", afn)
+		cmd = exec.Command("gimp", pi.File)
 	}
 	out, _ := cmd.CombinedOutput()
 	fmt.Printf("%s\n", out)
@@ -500,19 +520,15 @@ func (pv *PixView) OpenGimp(fname string) {
 
 // InfoCur shows metadata info about current file
 func (pv *PixView) InfoCur() {
-	if !pv.CheckCur() {
+	pi := pv.CheckCur()
+	if pi == nil {
 		return
 	}
-	pv.InfoFile(pv.CurFile)
+	pv.InfoFile(pi)
 }
 
 // InfoFile shows metadata info about current file
-func (pv *PixView) InfoFile(fname string) {
-	pi, has := pv.AllInfo[fname]
-	if !has {
-		log.Printf("weird, no info for: %v\n", fname)
-		return
-	}
+func (pv *PixView) InfoFile(pi *picinfo.Info) {
 	giv.StructViewDialog(pv.Viewport, pi, giv.DlgOpts{Title: "Picture Info: " + pi.File}, nil, nil)
 }
 
@@ -524,25 +540,140 @@ func (pv *PixView) FileInfo(idx int) {
 
 // MapCur shows GPS coordinates for current file on google maps
 func (pv *PixView) MapCur() {
-	if !pv.CheckCur() {
+	pi := pv.CheckCur()
+	if pi == nil {
 		return
 	}
-	pv.MapFile(pv.CurFile)
+	pv.MapFile(pi)
 }
 
 // MapFile shows GPS coordinates for file on google maps
-func (pv *PixView) MapFile(fname string) {
-	pi, has := pv.AllInfo[fname]
-	if !has {
-		log.Printf("weird, no info for: %v\n", fname)
-		return
-	}
+func (pv *PixView) MapFile(pi *picinfo.Info) {
 	if pi.GPSLoc.Lat == 0 && pi.GPSLoc.Long == 0 {
 		gi.PromptDialog(nil, gi.DlgOpts{Title: "No GPS Location", Prompt: "That file does not have a GPS location"}, gi.AddOk, gi.NoCancel, nil, nil)
 		return
 	}
 	url := fmt.Sprintf("https://www.google.com/maps/search/?api=1&query=%g,%g", pi.GPSLoc.Lat, pi.GPSLoc.Long)
 	oswin.TheApp.OpenURL(url)
+}
+
+// SaveExifSel saves updated Exif information for currently selected files.
+// This will change file type if it is not already a Jpeg as that is only supported type.
+func (pv *PixView) SaveExifSel() {
+	pis := pv.CheckSel()
+	n := len(pis)
+	if n == 0 {
+		return
+	}
+	for _, pi := range pis {
+		pv.SaveExifFile(pi)
+	}
+	pv.FolderFiles = nil
+	pv.DirInfo() // update -- also saves updated info
+}
+
+// RenameAsJpeg renames given file as a Jpeg file instead of whatever it was originally.
+// This calls GetFolderFiles() if FolderFiles is empty -- can reset that to nil in an outer loop.
+// Info record will have the new name after.
+func (pv *PixView) RenameAsJpeg(pi *picinfo.Info) {
+	if pv.FolderFiles == nil {
+		pv.GetFolderFiles()
+	}
+	fnb := filepath.Base(pi.File)
+	fnext, _ := dirs.SplitExt(fnb)
+	nfn := fnext + ".jpg"
+	pv.RenameFile(fnb, nfn)
+	adir := filepath.Join(pv.ImageDir, "All")
+	pi.File = filepath.Join(adir, nfn)
+}
+
+// SaveExifFile saves updated Exif information for given file.
+// This will change file type if it is not already a Jpeg as that is only supported type.
+// This calls GetFolderFiles() if FolderFiles is empty -- can reset that to nil in an outer loop
+func (pv *PixView) SaveExifFile(pi *picinfo.Info) error {
+	if pi.Sup != filecat.Jpeg {
+		fmt.Printf("Note: changing file to Jpeg instead of %s\n", pi.Sup.String())
+		img, err := picinfo.OpenImage(pi.File)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		pv.RenameAsJpeg(pi)
+		pi.Size = img.Bounds().Size()
+		err = picinfo.SaveJpegImageInfo(pi, img)
+		if err != nil {
+			pv.ThumbGen(pi)
+		}
+		return err
+	}
+	err := picinfo.SaveUpdatedJpeg(pi)
+	if err != nil {
+		pv.ThumbGen(pi)
+	}
+	return err
+}
+
+// RotateLeftSel rotates selected images left 90
+func (pv *PixView) RotateLeftSel() {
+	pv.RotateSel(-90)
+}
+
+// RotateRightSel rotates selected images right 90
+func (pv *PixView) RotateRightSel() {
+	pv.RotateSel(90)
+}
+
+// RotateSel rotates selected images by given number of degrees (+ = right, - = left).
+// +/- 90 and 180 are special cases:
+// If a Jpeg file, rotation is done through the Orientation Exif
+// setting, otherwise it is manually rotated and saved, except if it is an Heic file
+// which must be converted to jpeg at this point..
+func (pv *PixView) RotateSel(deg float32) {
+	pis := pv.CheckSel()
+	n := len(pis)
+	if n == 0 {
+		return
+	}
+	for _, pi := range pis {
+		pv.RotateImage(pi, deg)
+	}
+	pv.FolderFiles = nil
+	pv.DirInfo() // update -- also saves updated info
+}
+
+// RotateImage rotates image by given number of degrees (+ = right, - = left).
+// +/- 90 and 180 are special cases:
+// If a Jpeg file, rotation is done through the Orientation Exif
+// setting, otherwise it is manually rotated and saved, except if it is an Heic file
+// which must be converted to jpeg at this point..
+func (pv *PixView) RotateImage(pi *picinfo.Info, deg float32) error {
+	non90 := deg != 90 && deg != -90 && deg != 180
+	if non90 || pi.Sup != filecat.Jpeg {
+		img, err := picinfo.OpenImage(pi.File)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		img = picinfo.OrientImage(img, pi.Orient)
+		opts := &transform.RotationOptions{ResizeBounds: true}
+		img = transform.Rotate(img, float64(deg), opts)
+		switch pi.Sup {
+		case filecat.Jpeg:
+			rawExif, _ := picinfo.OpenRawExif(pi.File)
+			picinfo.SaveJpegImageExif(pi, rawExif, img)
+		case filecat.Heic:
+			rawExif, _ := picinfo.OpenRawExif(pi.File)
+			pv.RenameAsJpeg(pi)
+			picinfo.SaveJpegImageExif(pi, rawExif, img)
+		default:
+			picinfo.SaveImage(pi.File, img)
+		}
+		pv.ThumbGen(pi)
+	} else {
+		pi.Orient = pi.Orient.Rotate(int(deg))
+		pv.SaveExifFile(pi)
+	}
+	return nil
 }
 
 // GoPixViewWindow opens an interactive editor of the given Ki tree, at its
@@ -618,6 +749,26 @@ var PixViewProps = ki.Props{
 			"desc":  "open current file (last selected) using Gimp image editor",
 			"label": "Gimp",
 		}},
+		{"sep-rot", ki.BlankProp{}},
+		{"RotateLeftSel", ki.Props{
+			"icon":  "rotate-left",
+			"label": "Left",
+			"desc":  "rotate selected images 90 degrees left",
+		}},
+		{"RotateRightSel", ki.Props{
+			"icon":  "rotate-right",
+			"label": "Right",
+			"desc":  "rotate selected images 90 degrees right",
+		}},
+		{"RotateSel", ki.Props{
+			"icon":  "rotate-right",
+			"label": "Rotate",
+			"desc":  "rotate selected images by given number of degrees",
+			"Args": ki.PropSlice{
+				{"Degrees", ki.Props{}},
+			},
+		}},
+		{"sep-info", ki.BlankProp{}},
 		{"InfoCur", ki.Props{
 			"icon":  "info",
 			"desc":  "show metadata info for current file (last selected)",
@@ -627,6 +778,11 @@ var PixViewProps = ki.Props{
 			"icon":  "info",
 			"desc":  "show GPS map info for current file (last selected), if available",
 			"label": "Map",
+		}},
+		{"SaveExifSel", ki.Props{
+			"icon":  "file-save",
+			"desc":  "save any updated exif image metadata for currently selected file(s) if they've been edited -- this will automatically change file to a Jpeg format if it is not already, as that is the only supported exif type (for now)",
+			"label": "Save Exif",
 		}},
 	},
 	"MainMenu": ki.PropSlice{

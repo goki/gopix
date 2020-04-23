@@ -126,7 +126,7 @@ func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 		}
 		fn := filepath.Base(imgs[i])
 		ffn := filepath.Join(fdir, fn)
-		pi, err := picinfo.ReadExif(ffn)
+		pi, err := picinfo.OpenExif(ffn)
 		if pi == nil {
 			fmt.Printf("failed exif: %v err: %v\n", fn, err)
 			continue
@@ -351,4 +351,8 @@ func (pv *PixView) RenameByDate() {
 		delete(pv.AllInfo, fn)
 		pv.AllInfo[nfn] = pi
 	}
+	fmt.Println("...Done\n")
+	gi.PromptDialog(nil, gi.DlgOpts{Title: "Done", Prompt: "Done Renaming by Date"}, gi.AddOk, gi.NoCancel, nil, nil)
+	pv.DirInfo()
+	return
 }
