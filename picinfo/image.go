@@ -10,6 +10,7 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"io/ioutil"
 	"log"
 	"os"
 
@@ -23,6 +24,16 @@ import (
 
 // JpegEncodeQuality is the default encoding quality for Jpeg files
 var JpegEncodeQuality = 90
+
+// OpenBytes opens file and returns bytes
+func OpenBytes(fn string) ([]byte, error) {
+	f, err := os.Open(fn)
+	defer f.Close()
+	if err != nil {
+		return nil, err
+	}
+	return ioutil.ReadAll(f)
+}
 
 // OpenImage opens an image from given filename.
 // Supports: png, jpeg, tiff, gif, bmp, pgm, pbm, ppm, pnm, and heic formats.

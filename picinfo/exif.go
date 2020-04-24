@@ -11,7 +11,6 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -27,144 +26,30 @@ import (
 // reference for all defined tags:
 // https://www.exiv2.org/tags.html
 
-// One entry of EXIF data -- used internally
-type IfdEntry struct {
-	IfdPath     string                      `json:"ifd_path"`
-	FqIfdPath   string                      `json:"fq_ifd_path"`
-	IfdIndex    int                         `json:"ifd_index"`
-	TagId       uint16                      `json:"tag_id"`
-	TagName     string                      `json:"tag_name"`
-	TagTypeId   exifcommon.TagTypePrimitive `json:"tag_type_id"`
-	TagTypeName string                      `json:"tag_type_name"`
-	UnitCount   uint32                      `json:"unit_count"`
-	Value       interface{}                 `json:"value"`
-	ValueString string                      `json:"value_string"`
-}
+// todo: support exif for other filetypes:
+// PNG: https://stackoverflow.com/questions/9542359/does-png-contain-exif-data-like-jpg
+// TIFF: this is a basic tiff thing -- but std go package does not support exif:
+// https://godoc.org/golang.org/x/image/tiff
 
-func (e *IfdEntry) ToInt() int {
-	switch e.TagTypeId {
-	case exifcommon.TypeLong:
-		vl := e.Value.([]uint32)
-		return int(vl[0])
-	case exifcommon.TypeShort:
-		vl := e.Value.([]uint16)
-		return int(vl[0])
-	case exifcommon.TypeSignedLong:
-		vl := e.Value.([]int32)
-		return int(vl[0])
-	case exifcommon.TypeRational:
-		vl := e.Value.([]exifcommon.Rational)
-		den := int(vl[0].Denominator)
-		if den != 0 {
-			return int(vl[0].Numerator) / den
-		}
-		return 0
-	case exifcommon.TypeSignedRational:
-		vl := e.Value.([]exifcommon.SignedRational)
-		den := int(vl[0].Denominator)
-		if den != 0 {
-			return int(vl[0].Numerator) / den
-		}
-		return 0
-	}
-	return 0
-}
-
-func (e *IfdEntry) ToFloat() float64 {
-	switch e.TagTypeId {
-	case exifcommon.TypeLong:
-		vl := e.Value.([]uint32)
-		return float64(vl[0])
-	case exifcommon.TypeShort:
-		vl := e.Value.([]uint16)
-		return float64(vl[0])
-	case exifcommon.TypeSignedLong:
-		vl := e.Value.([]int32)
-		return float64(vl[0])
-	case exifcommon.TypeRational:
-		vl := e.Value.([]exifcommon.Rational)
-		den := float64(vl[0].Denominator)
-		if den != 0 {
-			return float64(vl[0].Numerator) / den
-		}
-		return 0
-	case exifcommon.TypeSignedRational:
-		vl := e.Value.([]exifcommon.SignedRational)
-		den := float64(vl[0].Denominator)
-		if den != 0 {
-			return float64(vl[0].Numerator) / den
-		}
-		return 0
-	}
-	return 0
-}
-
-func (e *IfdEntry) ToFloats() []float64 {
-	rf := make([]float64, e.UnitCount)
-	switch e.TagTypeId {
-	case exifcommon.TypeLong:
-		vl := e.Value.([]uint32)
-		for i := range vl {
-			rf[i] = float64(vl[i])
-		}
-	case exifcommon.TypeShort:
-		vl := e.Value.([]uint16)
-		for i := range vl {
-			rf[i] = float64(vl[i])
-		}
-	case exifcommon.TypeSignedLong:
-		vl := e.Value.([]int32)
-		for i := range vl {
-			rf[i] = float64(vl[i])
-		}
-	case exifcommon.TypeRational:
-		vl := e.Value.([]exifcommon.Rational)
-		for i := range vl {
-			den := float64(vl[i].Denominator)
-			if den != 0 {
-				rf[i] = float64(vl[i].Numerator) / den
-			}
-		}
-	case exifcommon.TypeSignedRational:
-		vl := e.Value.([]exifcommon.SignedRational)
-		for i := range vl {
-			den := float64(vl[i].Denominator)
-			if den != 0 {
-				rf[i] = float64(vl[i].Numerator) / den
-			}
-		}
-	}
-	return rf
-}
-
-// OpenBytes opens file and returns bytes
-func OpenBytes(fn string) ([]byte, error) {
-	f, err := os.Open(fn)
-	defer f.Close()
-	if err != nil {
-		return nil, err
-	}
-	return ioutil.ReadAll(f)
-}
-
-// OpenExif opens file and reads the exif info for given file
-func OpenExif(fn string) (*Info, error) {
+// OpenNewInfo opens file and reads the exif info for given file, returning
+// a new Info with that info all set.
+func OpenNewInfo(fn string) (*Info, error) {
 	rawExif, err := OpenRawExif(fn)
 	if err != nil && err != exif.ErrNoExif {
 		log.Println(err)
 		return nil, err
 	}
-	pi, err := InitInfoFromFile(fn)
+	pi, err := NewInfoForFile(fn)
 	if err != nil {
 		log.Println(err)
 		return nil, err
 	}
-	RawExifToInfo(pi, rawExif)
+	pi.ParseRawExif(rawExif)
 	return pi, err
 }
 
-// InitInfoFromFile returns a new Info initialized with basic info from file
-func InitInfoFromFile(fn string) (*Info, error) {
+// NewInfoForFile returns a new Info initialized with basic info from file
+func NewInfoForFile(fn string) (*Info, error) {
 	pi := &Info{File: fn}
 	pi.Defaults()
 	pi.Sup = filecat.SupportedFromFile(fn)
@@ -225,8 +110,8 @@ func OpenRawExif(fn string) ([]byte, error) {
 	}
 }
 
-// RawExifToInfo parses the raw Exif data into our Info structure
-func RawExifToInfo(pi *Info, rawExif []byte) {
+// ParseRawExif parses the raw Exif data into our Info structure
+func (pi *Info) ParseRawExif(rawExif []byte) {
 	if rawExif == nil {
 		return
 	}
@@ -413,25 +298,17 @@ func RawExifToInfo(pi *Info, rawExif []byte) {
 	pi.GPSLoc.Long = DecDegFromDMS(long[0], long[1], long[2])
 	if gpstime != nil {
 		durf := gpstime[0]*3600 + gpstime[1]*60 + gpstime[2]
-		pi.GPSDate.Add(time.Duration(durf))
+		pi.GPSDate.Add(time.Second * time.Duration(durf))
 	}
-}
-
-func intToLong(val int) []uint32 {
-	return []uint32{uint32(val)}
-}
-
-func intToShort(val int) []uint16 {
-	return []uint16{uint16(val)}
 }
 
 // UpdateExif reads the exif from file, and generates a new exif incorporating
 // changes from given Info.  if rootIfd != nil it is used as a starting point
 // otherwise it is generated from the rawExif, which also can be nil if starting fresh.
 // returns true if data was different and requires saving.
-func UpdateExif(pi *Info, rawExif []byte, rootIfd *exif.Ifd) (*exif.IfdBuilder, bool, error) {
-	ci, err := InitInfoFromFile(pi.File)
-	RawExifToInfo(ci, rawExif)
+func (pi *Info) UpdateExif(rawExif []byte, rootIfd *exif.Ifd) (*exif.IfdBuilder, bool, error) {
+	ci, err := NewInfoForFile(pi.File)
+	ci.ParseRawExif(rawExif)
 
 	if rootIfd == nil && rawExif != nil {
 		im := exif.NewIfdMappingWithStandard()
@@ -519,8 +396,17 @@ func UpdateExif(pi *Info, rawExif []byte, rootIfd *exif.Ifd) (*exif.IfdBuilder, 
 	return ib, updt, err
 }
 
-// SaveUpdatedJpeg saves a new Jpeg encoded file with info updated to reflect given info
-func SaveUpdatedJpeg(pi *Info) error {
+// UpdateFileMod updates the modification time on the file
+func (pi *Info) UpdateFileMod() error {
+	fst, err := os.Stat(pi.File)
+	if err == nil {
+		pi.FileMod = fst.ModTime()
+	}
+	return err
+}
+
+// SaveJpegUpdated saves a new Jpeg encoded file with info updated to reflect given info
+func (pi *Info) SaveJpegUpdated() error {
 	data, err := OpenBytes(pi.File)
 	if err != nil {
 		log.Println(err)
@@ -554,7 +440,7 @@ func SaveUpdatedJpeg(pi *Info) error {
 		}
 	}
 
-	ib, updt, err := UpdateExif(pi, rawExif, rootIfd)
+	ib, updt, err := pi.UpdateExif(rawExif, rootIfd)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -577,12 +463,13 @@ func SaveUpdatedJpeg(pi *Info) error {
 
 	err = sl.Write(f)
 	f.Close()
+	pi.UpdateFileMod()
 	return nil
 }
 
-// SaveJpegImageInfo saves a new Jpeg encoded file with exif data generated from current info
-func SaveJpegImageInfo(pi *Info, img image.Image) error {
-	ib, _, err := UpdateExif(pi, nil, nil)
+// SaveJpegNew saves a new Jpeg encoded file with exif data generated from current info
+func (pi *Info) SaveJpegNew(img image.Image) error {
+	ib, _, err := pi.UpdateExif(nil, nil)
 	if err != nil {
 		log.Println(err)
 		return err
@@ -595,7 +482,7 @@ func SaveJpegImageInfo(pi *Info, img image.Image) error {
 		return err
 	}
 
-	return SaveJpegImageExif(pi, exifData, img)
+	return pi.SaveJpegExif(exifData, img)
 }
 
 // AddExifPrefix adds the standard Exif00 prefix to given encoded exif data
@@ -612,9 +499,22 @@ func AddExifPrefix(exifData []byte) []byte {
 	return rawExif
 }
 
-// SaveJpegImageExif saves a new Jpeg encoded file with given raw bytes of exif data
+// SaveJpegUpdatedExif saves a new Jpeg encoded file with given raw bytes of exif data,
+// which is updated to current Info settings prior to saving.
+func (pi *Info) SaveJpegUpdatedExif(rawExif []byte, img image.Image) error {
+	ib, _, err := pi.UpdateExif(rawExif, nil)
+	ibe := exif.NewIfdByteEncoder()
+	exifData, err := ibe.EncodeToExif(ib)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	return pi.SaveJpegExif(exifData, img)
+}
+
+// SaveJpegExif saves a new Jpeg encoded file with given raw bytes of exif data
 // Note: rawExif does NOT have to have the standard Exif00 prefix already -- will be added
-func SaveJpegImageExif(pi *Info, rawExif []byte, img image.Image) error {
+func (pi *Info) SaveJpegExif(rawExif []byte, img image.Image) error {
 	f, err := os.Create(pi.File)
 	if err != nil {
 		log.Println(err)
@@ -631,6 +531,17 @@ func SaveJpegImageExif(pi *Info, rawExif []byte, img image.Image) error {
 		return err
 	}
 	return nil
+}
+
+///////////////////////////////////////////////////////////////////////////////
+//  Utilities
+
+func intToLong(val int) []uint32 {
+	return []uint32{uint32(val)}
+}
+
+func intToShort(val int) []uint16 {
+	return []uint16{uint16(val)}
 }
 
 // Skip Writer for exif writing -- used to skip over the 2 byte magic number
@@ -683,4 +594,114 @@ func newWriterExif(w io.Writer, exif []byte) (io.Writer, error) {
 	}
 
 	return writer, nil
+}
+
+// One entry of EXIF data -- used internally
+type IfdEntry struct {
+	IfdPath     string                      `json:"ifd_path"`
+	FqIfdPath   string                      `json:"fq_ifd_path"`
+	IfdIndex    int                         `json:"ifd_index"`
+	TagId       uint16                      `json:"tag_id"`
+	TagName     string                      `json:"tag_name"`
+	TagTypeId   exifcommon.TagTypePrimitive `json:"tag_type_id"`
+	TagTypeName string                      `json:"tag_type_name"`
+	UnitCount   uint32                      `json:"unit_count"`
+	Value       interface{}                 `json:"value"`
+	ValueString string                      `json:"value_string"`
+}
+
+func (e *IfdEntry) ToInt() int {
+	switch e.TagTypeId {
+	case exifcommon.TypeLong:
+		vl := e.Value.([]uint32)
+		return int(vl[0])
+	case exifcommon.TypeShort:
+		vl := e.Value.([]uint16)
+		return int(vl[0])
+	case exifcommon.TypeSignedLong:
+		vl := e.Value.([]int32)
+		return int(vl[0])
+	case exifcommon.TypeRational:
+		vl := e.Value.([]exifcommon.Rational)
+		den := int(vl[0].Denominator)
+		if den != 0 {
+			return int(vl[0].Numerator) / den
+		}
+		return 0
+	case exifcommon.TypeSignedRational:
+		vl := e.Value.([]exifcommon.SignedRational)
+		den := int(vl[0].Denominator)
+		if den != 0 {
+			return int(vl[0].Numerator) / den
+		}
+		return 0
+	}
+	return 0
+}
+
+func (e *IfdEntry) ToFloat() float64 {
+	switch e.TagTypeId {
+	case exifcommon.TypeLong:
+		vl := e.Value.([]uint32)
+		return float64(vl[0])
+	case exifcommon.TypeShort:
+		vl := e.Value.([]uint16)
+		return float64(vl[0])
+	case exifcommon.TypeSignedLong:
+		vl := e.Value.([]int32)
+		return float64(vl[0])
+	case exifcommon.TypeRational:
+		vl := e.Value.([]exifcommon.Rational)
+		den := float64(vl[0].Denominator)
+		if den != 0 {
+			return float64(vl[0].Numerator) / den
+		}
+		return 0
+	case exifcommon.TypeSignedRational:
+		vl := e.Value.([]exifcommon.SignedRational)
+		den := float64(vl[0].Denominator)
+		if den != 0 {
+			return float64(vl[0].Numerator) / den
+		}
+		return 0
+	}
+	return 0
+}
+
+func (e *IfdEntry) ToFloats() []float64 {
+	rf := make([]float64, e.UnitCount)
+	switch e.TagTypeId {
+	case exifcommon.TypeLong:
+		vl := e.Value.([]uint32)
+		for i := range vl {
+			rf[i] = float64(vl[i])
+		}
+	case exifcommon.TypeShort:
+		vl := e.Value.([]uint16)
+		for i := range vl {
+			rf[i] = float64(vl[i])
+		}
+	case exifcommon.TypeSignedLong:
+		vl := e.Value.([]int32)
+		for i := range vl {
+			rf[i] = float64(vl[i])
+		}
+	case exifcommon.TypeRational:
+		vl := e.Value.([]exifcommon.Rational)
+		for i := range vl {
+			den := float64(vl[i].Denominator)
+			if den != 0 {
+				rf[i] = float64(vl[i].Numerator) / den
+			}
+		}
+	case exifcommon.TypeSignedRational:
+		vl := e.Value.([]exifcommon.SignedRational)
+		for i := range vl {
+			den := float64(vl[i].Denominator)
+			if den != 0 {
+				rf[i] = float64(vl[i].Numerator) / den
+			}
+		}
+	}
+	return rf
 }

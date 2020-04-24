@@ -4,7 +4,7 @@ Go picture management app, because Mac Photos bricked my entire photo library up
 
 # Goals
 
-* simple, entirely file-based design -- no databases.   just write to exif meta data on images themselves.  so everything is future-proof and no lockin.
+* simple, entirely file-based design -- no databases.   just write to exif meta data on images themselves.  so everything is future-proof and no lockin.  (does have a .json file cache, but it can be fully regenerated from exif..)
 
 * sync with e.g., google drive using the drive sync thing.
 
@@ -19,9 +19,9 @@ Go picture management app, because Mac Photos bricked my entire photo library up
 
 # TODO
 
-* shift-select in imggrid needs top-level updt
+* Need a busy / progress bar for long-running ops.
 
-* rotate images -- just change orientation flag and update exif for .jpg and .tiff images
+* Duplicates detector -- move dupes to trash
 
-* need to be able to write exif!  see heic example.
+* Finish ImgView with auto-size and zoom keyboard commands (+ / -)
 

@@ -29,16 +29,17 @@ import (
 // The outer layout contains the inner grid and a scrollbar
 type ImgGrid struct {
 	gi.Frame
-	ImageMax     float32          `desc:"maximum size for images -- geom set to square of this size"`
-	Size         image.Point      `desc:"number of columns and rows to display"`
-	Images       []string         `desc:"list of image files to display"`
-	SelectedIdx  int              `desc:"last selected item"`
-	SelectMode   bool             `copy:"-" desc:"editing-mode select rows mode"`
-	SelectedIdxs map[int]struct{} `copy:"-" desc:"list of currently-selected file indexes"`
-	DraggedIdxs  []int            `copy:"-" desc:"list of currently-dragged indexes"`
-	ImageSig     ki.Signal        `copy:"-" json:"-" xml:"-" desc:"signal for image events -- selection events occur via WidgetSig"`
-	CurIdx       int              `copy:"-" json:"-" xml:"-" desc:"current copy / paste idx"`
-	InfoFunc     func(idx int)    `desc:"function for displaying file at given index"`
+	ImageMax     float32                   `desc:"maximum size for images -- geom set to square of this size"`
+	Images       []string                  `desc:"list of image files to display"`
+	CtxtMenuFunc func(m *gi.Menu, idx int) `desc:"function for displaying context menu for item at given index -- if not set then a basic standard one is used"`
+	InsertOk     bool                      `desc:"if true, drag-n-drop and paste actions actually result in insertion -- otherwise they just drive signals to be managed externally"`
+	SelectedIdx  int                       `desc:"last selected item"`
+	SelectMode   bool                      `copy:"-" desc:"editing-mode select rows mode"`
+	SelectedIdxs map[int]struct{}          `copy:"-" desc:"list of currently-selected file indexes"`
+	DraggedIdxs  []int                     `copy:"-" desc:"list of currently-dragged indexes"`
+	ImageSig     ki.Signal                 `copy:"-" json:"-" xml:"-" desc:"signal for image events -- selection events occur via WidgetSig"`
+	Size         image.Point               `desc:"number of columns and rows to display -- computed from avail room"`
+	CurIdx       int                       `copy:"-" json:"-" xml:"-" desc:"current copy / paste idx"`
 }
 
 var KiT_ImgGrid = kit.Types.AddType(&ImgGrid{}, ImgGridProps)
@@ -256,7 +257,8 @@ func (ig *ImgGrid) RenderSelected() {
 	rs := &ig.Viewport.Render
 	pc := &rs.Paint
 
-	pc.StrokeStyle.SetColor(gi.Prefs.Colors.Select)
+	rs.Lock()
+	pc.StrokeStyle.SetColor(&st.Border.Color)
 	pc.StrokeStyle.Width = st.Border.Width
 	pc.FillStyle.SetColor(nil)
 	wd := pc.StrokeStyle.Width.Dots
@@ -270,12 +272,15 @@ func (ig *ImgGrid) RenderSelected() {
 			if _, sel := ig.SelectedIdxs[idx]; sel {
 				pos := bm.LayState.Alloc.Pos.SubScalar(wd)
 				sz := bm.LayState.Alloc.Size.AddScalar(2.0 * wd)
+				// fmt.Printf("sel: %d  wd: %v  pos: %v  sz: %v\n", idx, wd, pos, sz)
 				pc.DrawRectangle(rs, pos.X, pos.Y, sz.X, sz.Y)
+				pc.FillStrokeClear(rs)
 			}
 			bi++
 			idx++
 		}
 	}
+	rs.Unlock()
 }
 
 func (ig *ImgGrid) Render2D() {
@@ -284,13 +289,13 @@ func (ig *ImgGrid) Render2D() {
 	}
 	if ig.PushBounds() {
 		ig.FrameStdRender()
+		ig.RenderSelected()
 		ig.This().(gi.Node2D).ConnectEvents2D()
 		if ig.ScrollsOff {
 			ig.ManageOverflow()
 		}
 		ig.RenderScrolls()
 		ig.Render2DChildren()
-		ig.RenderSelected()
 		ig.PopBounds()
 	} else {
 		ig.SetScrollsOff()
@@ -324,7 +329,7 @@ func (ig *ImgGrid) ImgGridEvents() {
 			igg.SelectIdx(si)
 			igg.ImageSig.Emit(igg.This(), int64(ImgGridDoubleClicked), si)
 			me.SetProcessed()
-		case me.Button == mouse.Left:
+		case me.Button == mouse.Left && me.Action == mouse.Release:
 			idx, ok := igg.IdxFromPos(me.Pos())
 			if !ok {
 				return
@@ -371,6 +376,54 @@ func (ig *ImgGrid) ImgGridEvents() {
 /////////////////////////////////////////////////////////////////////////////
 //    Moving
 
+// MoveNext moves the selection to next item, using given select mode
+// (from keyboard modifiers) -- returns newly selected row or -1 if failed
+func (ig *ImgGrid) MoveNext(selMode mouse.SelectModes) int {
+	nf := ig.NumImages()
+	if ig.SelectedIdx >= nf-1 {
+		ig.SelectedIdx = nf - 1
+		return -1
+	}
+	ig.SelectedIdx++
+	ig.SelectIdxAction(ig.SelectedIdx, selMode)
+	return ig.SelectedIdx
+}
+
+// MoveNextAction moves the selection to next item, using given select
+// mode (from keyboard modifiers) -- and emits select event for newly selected
+// row
+func (ig *ImgGrid) MoveNextAction(selMode mouse.SelectModes) int {
+	nidx := ig.MoveNext(selMode)
+	if nidx >= 0 {
+		ig.ScrollToIdx(nidx)
+		ig.WidgetSig.Emit(ig.This(), int64(gi.WidgetSelected), nidx)
+	}
+	return nidx
+}
+
+// MovePrev moves the selection to previous idx, using given select mode
+// (from keyboard modifiers) -- returns newly selected idx or -1 if failed
+func (ig *ImgGrid) MovePrev(selMode mouse.SelectModes) int {
+	if ig.SelectedIdx <= 0 {
+		ig.SelectedIdx = 0
+		return -1
+	}
+	ig.SelectedIdx--
+	ig.SelectIdxAction(ig.SelectedIdx, selMode)
+	return ig.SelectedIdx
+}
+
+// MovePrevAction moves the selection to previous idx, using given select
+// mode (from keyboard modifiers) -- and emits select event for newly selected idx
+func (ig *ImgGrid) MovePrevAction(selMode mouse.SelectModes) int {
+	nidx := ig.MovePrev(selMode)
+	if nidx >= 0 {
+		ig.ScrollToIdx(nidx)
+		ig.WidgetSig.Emit(ig.This(), int64(gi.WidgetSelected), nidx)
+	}
+	return nidx
+}
+
 // MoveDown moves the selection down to next row, using given select mode
 // (from keyboard modifiers) -- returns newly selected row or -1 if failed
 func (ig *ImgGrid) MoveDown(selMode mouse.SelectModes) int {
@@ -379,7 +432,10 @@ func (ig *ImgGrid) MoveDown(selMode mouse.SelectModes) int {
 		ig.SelectedIdx = nf - 1
 		return -1
 	}
-	ig.SelectedIdx++
+	if ig.SelectedIdx+ig.Size.X >= nf {
+		return -1
+	}
+	ig.SelectedIdx += ig.Size.X
 	ig.SelectIdxAction(ig.SelectedIdx, selMode)
 	return ig.SelectedIdx
 }
@@ -403,7 +459,10 @@ func (ig *ImgGrid) MoveUp(selMode mouse.SelectModes) int {
 		ig.SelectedIdx = 0
 		return -1
 	}
-	ig.SelectedIdx--
+	if ig.SelectedIdx-ig.Size.X < 0 {
+		return -1
+	}
+	ig.SelectedIdx -= ig.Size.X
 	ig.SelectIdxAction(ig.SelectedIdx, selMode)
 	return ig.SelectedIdx
 }
@@ -427,8 +486,11 @@ func (ig *ImgGrid) MovePageDown(selMode mouse.SelectModes) int {
 		ig.SelectedIdx = nf - 1
 		return -1
 	}
-	ig.SelectedIdx += ig.Size.X * ig.Size.Y
-	ig.SelectedIdx = ints.MinInt(ig.SelectedIdx, nf-1)
+	np := ig.Size.X * ig.Size.Y
+	if ig.SelectedIdx+np >= nf {
+		return ig.MoveDown(selMode)
+	}
+	ig.SelectedIdx += np
 	ig.SelectIdxAction(ig.SelectedIdx, selMode)
 	return ig.SelectedIdx
 }
@@ -451,8 +513,11 @@ func (ig *ImgGrid) MovePageUp(selMode mouse.SelectModes) int {
 		ig.SelectedIdx = 0
 		return -1
 	}
-	ig.SelectedIdx -= ig.Size.X * ig.Size.Y
-	ig.SelectedIdx = ints.MaxInt(0, ig.SelectedIdx)
+	np := ig.Size.X * ig.Size.Y
+	if ig.SelectedIdx-np < 0 {
+		return ig.MoveUp(selMode)
+	}
+	ig.SelectedIdx -= np
 	ig.SelectIdxAction(ig.SelectedIdx, selMode)
 	return ig.SelectedIdx
 }
@@ -517,8 +582,8 @@ func (ig *ImgGrid) IdxFromPos(pos image.Point) (int, bool) {
 	if rp.X < 0 || rp.Y < 0 {
 		return 0, false
 	}
-	sp := 2 * gr.Spacing.Dots
-	x := rp.X / int(ig.ImageMax+sp)
+	sp := gr.Spacing.Dots
+	x := rp.X / int(ig.ImageMax)
 	x = ints.MinInt(x, ig.Size.X)
 	y := rp.Y / int(ig.ImageMax+sp)
 	y = ints.MinInt(y, ig.Size.Y)
@@ -536,7 +601,7 @@ func (ig *ImgGrid) ScrollToIdx(idx int) bool {
 		sb.SetValueAction(float32(ir))
 		return true
 	} else if idx >= si+np {
-		ni := ir - ig.Size.Y - 1
+		ni := ir - (ig.Size.Y - 1)
 		ni = ints.MaxInt(0, ni)
 		sb.SetValueAction(float32(ni))
 		return true
@@ -550,7 +615,6 @@ func (ig *ImgGrid) SelectIdxWidgets(idx int, sel bool) bool {
 	if !ig.IsIdxVisible(idx) {
 		return false
 	}
-	ig.UpdateSig()
 	return true
 }
 
@@ -711,16 +775,16 @@ func (ig *ImgGrid) SelectIdxAction(idx int, mode mouse.SelectModes) {
 			ig.WidgetSig.Emit(ig.This(), int64(gi.WidgetSelected), ig.SelectedIdx)
 		}
 	case mouse.Unselect:
-		ig.SelectedIdx = idx
 		ig.UnselectIdxAction(idx)
 	case mouse.SelectQuiet:
 		ig.SelectedIdx = idx
 		ig.SelectIdx(idx)
 	case mouse.UnselectQuiet:
-		ig.SelectedIdx = idx
 		ig.UnselectIdx(idx)
 	}
-	ig.Update()
+	if mode != mouse.SelectQuiet && mode != mouse.UnselectQuiet {
+		ig.UpdateSig()
+	}
 }
 
 // UnselectIdxAction unselects this idx (if selected) -- and emits a signal
@@ -1074,13 +1138,6 @@ func (ig *ImgGrid) DropCancel() {
 //    Events
 
 func (ig *ImgGrid) StdCtxtMenu(m *gi.Menu, idx int) {
-	m.AddAction(gi.ActOpts{Label: "Info", Data: idx},
-		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
-			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
-			if igg.InfoFunc != nil {
-				igg.InfoFunc(data.(int))
-			}
-		})
 	m.AddAction(gi.ActOpts{Label: "Copy", Data: idx},
 		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
 			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
@@ -1110,7 +1167,11 @@ func (ig *ImgGrid) StdCtxtMenu(m *gi.Menu, idx int) {
 
 func (ig *ImgGrid) ItemCtxtMenu(idx int) {
 	var men gi.Menu
-	ig.StdCtxtMenu(&men, idx)
+	if ig.CtxtMenuFunc != nil {
+		ig.CtxtMenuFunc(&men, idx)
+	} else {
+		ig.StdCtxtMenu(&men, idx)
+	}
 	if len(men) > 0 {
 		pos := ig.IdxPos(idx)
 		gi.PopupMenu(men, pos.X, pos.Y, ig.Viewport, ig.Nm+"-menu")
@@ -1133,6 +1194,12 @@ func (ig *ImgGrid) KeyInputActive(kt *key.ChordEvent) {
 	case gi.KeyFunCancelSelect:
 		ig.UnselectAllIdxs()
 		ig.SelectMode = false
+		kt.SetProcessed()
+	case gi.KeyFunMoveRight:
+		ig.MoveNextAction(selMode)
+		kt.SetProcessed()
+	case gi.KeyFunMoveLeft:
+		ig.MovePrevAction(selMode)
 		kt.SetProcessed()
 	case gi.KeyFunMoveDown:
 		ig.MoveDownAction(selMode)
@@ -1194,7 +1261,8 @@ var ImgGridProps = ki.Props{
 	"EnumType:Flag":    gi.KiT_NodeFlags,
 	"background-color": &gi.Prefs.Colors.Background,
 	"color":            &gi.Prefs.Colors.Font,
-	"border-width":     units.NewPx(2),
+	"border-color":     &gi.Prefs.Colors.Border,
+	"border-width":     units.NewPx(4),
 	"max-width":        -1,
 	"max-height":       -1,
 }

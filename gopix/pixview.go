@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/anthonynsimon/bild/transform"
 	"github.com/goki/gi/gi"
@@ -21,10 +23,12 @@ import (
 	"github.com/goki/ki/dirs"
 	"github.com/goki/ki/ki"
 	"github.com/goki/ki/kit"
+	"github.com/goki/ki/sliceclone"
 	"github.com/goki/pi/filecat"
 )
 
-// PixView shows a picture viewer
+// PixView is a picture viewer with a folder view on the left, and a tab bar with image grid
+// and currently selected view.
 type PixView struct {
 	gi.Frame
 	CurFile     string                `desc:"current file -- viewed in Current bitmap or last selected in ImgGrid"`
@@ -120,7 +124,7 @@ func (pv *PixView) Config(imgdir string) {
 	ig := tv.AddNewTab(imgrid.KiT_ImgGrid, "Images").(*imgrid.ImgGrid)
 	ig.ImageMax = ThumbMaxSize
 	ig.Config(true)
-	ig.InfoFunc = pv.FileInfo
+	ig.CtxtMenuFunc = pv.ImgGridCtxtMenu
 
 	pic := tv.AddNewTab(gi.KiT_Bitmap, "Current").(*gi.Bitmap)
 	pic.SetStretchMax()
@@ -161,7 +165,7 @@ func (pv *PixView) Config(imgdir string) {
 		}
 	})
 	ig.ImageSig.Connect(pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
-		// igg, _ := send.Embed(imgrid.KiT_ImgGrid).(*imgrid.ImgGrid)
+		igg, _ := send.Embed(imgrid.KiT_ImgGrid).(*imgrid.ImgGrid)
 		pvv, _ := recv.Embed(KiT_PixView).(*PixView)
 		idx := data.(int)
 		if idx < 0 || idx >= len(pv.Info) {
@@ -177,13 +181,11 @@ func (pv *PixView) Config(imgdir string) {
 			}
 			pvv.PicDeleteAt(idx)
 		case imgrid.ImgGridInserted:
-			// we don't really have anything useful to do here..
-		// 	if pvv.Folder == "Trash" {
-		// 		pvv.UntrashFiles([]string{fn})
-		// 	} else {
-		// 		// todo: duplicate
-		// 	}
-		// 	pvv.PicInsertAt(idx, []string{""}) // todo: not really used or sensible
+			if pvv.Folder == "Trash" {
+				igg.Images = sliceclone.String(pv.Thumbs)
+				return
+			}
+			pvv.ImgGridMoveDates(idx)
 		case imgrid.ImgGridDoubleClicked:
 			pvv.ViewFile(fn)
 		}
@@ -230,6 +232,16 @@ func (pv *PixView) PicDeleteAt(idx int) {
 func (pv *PixView) PicIdxByName(fname string) int {
 	for i, pi := range pv.Info {
 		if pi.File == fname {
+			return i
+		}
+	}
+	return -1
+}
+
+// PicIdxByThumb returns the index in current Info of given thumb name
+func (pv *PixView) PicIdxByThumb(tname string) int {
+	for i, pi := range pv.Info {
+		if pi.Thumb == tname {
 			return i
 		}
 	}
@@ -311,6 +323,48 @@ func (pv *PixView) Render2D() {
 		}
 	}
 	pv.Frame.Render2D()
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+//  Image grid actions
+
+func (pv *PixView) ImgGridCtxtMenu(m *gi.Menu, idx int) {
+	ig := pv.ImgGrid()
+	nf := len(pv.Info)
+	if idx >= nf-1 || idx < 0 {
+		return
+	}
+	pi := pv.Info[idx]
+	m.AddAction(gi.ActOpts{Label: "Info", Data: idx},
+		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+			pv.InfoFile(pi)
+		})
+	m.AddAction(gi.ActOpts{Label: "SetDate", Data: idx},
+		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+			pv.CurFile = filepath.Base(pi.File)
+			giv.CallMethod(pv, "SetDateTakenCur", pv.Viewport)
+		})
+	m.AddSeparator("clip")
+	m.AddAction(gi.ActOpts{Label: "Copy", Data: idx},
+		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+			ig.CopyIdxs(true)
+		})
+	m.AddAction(gi.ActOpts{Label: "Cut", Data: idx},
+		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+			ig.CutIdxs()
+		})
+	m.AddAction(gi.ActOpts{Label: "Paste", Data: idx},
+		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+			ig.PasteIdx(data.(int))
+		})
+	m.AddAction(gi.ActOpts{Label: "Duplicate", Data: idx},
+		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+			pv.Duplicate(pi)
+		})
+	m.AddAction(gi.ActOpts{Label: "Delete", Data: idx},
+		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+			ig.CutIdxs()
+		})
 }
 
 //////////////////////////////////////////////////////////////////////////////////
@@ -449,6 +503,33 @@ func (pv *PixView) ViewFile(fname string) {
 	bm.SetImage(img, 0, 0)
 }
 
+// Duplicate duplicates image
+func (pv *PixView) Duplicate(pi *picinfo.Info) error {
+	bmap := pv.BaseNamesMap()
+	fn := filepath.Base(pi.File)
+	fnext, ext := dirs.SplitExt(fn)
+	lext := strings.ToLower(ext)
+	nfn, n := pv.UniqueNameNumber(pi.DateTaken, pi.Number, lext, bmap)
+	npi := &picinfo.Info{}
+	*npi = *pi
+	adir := filepath.Join(pv.ImageDir, "All")
+	npi.File = filepath.Join(adir, nfn)
+	npi.Number = n
+	giv.CopyFile(npi.File, pi.File, 0664)
+	npi.UpdateFileMod()
+	fnext, _ = dirs.SplitExt(nfn)
+	tdir := pv.ThumbDir()
+	tfn := filepath.Join(tdir, fnext+".jpg")
+	npi.Thumb = tfn
+	giv.CopyFile(npi.Thumb, pi.Thumb, 0664)
+	pv.AllInfo[nfn] = npi
+	if pv.Folder != "All" {
+		pv.LinkToFolder(pv.Folder, []string{nfn})
+	}
+	pv.DirInfo(false)
+	return nil
+}
+
 // CheckCur checks that current file name is set and exists in AllInfo
 // returns nil if not, and opens a prompt dialog
 func (pv *PixView) CheckCur() *picinfo.Info {
@@ -532,12 +613,6 @@ func (pv *PixView) InfoFile(pi *picinfo.Info) {
 	giv.StructViewDialog(pv.Viewport, pi, giv.DlgOpts{Title: "Picture Info: " + pi.File}, nil, nil)
 }
 
-// FileInfo shows info for given file index -- callback for ImgGrid
-func (pv *PixView) FileInfo(idx int) {
-	pi := pv.Info[idx]
-	giv.StructViewDialog(pv.Viewport, pi, giv.DlgOpts{Title: "Picture Info: " + pi.File}, nil, nil)
-}
-
 // MapCur shows GPS coordinates for current file on google maps
 func (pv *PixView) MapCur() {
 	pi := pv.CheckCur()
@@ -600,16 +675,12 @@ func (pv *PixView) SaveExifFile(pi *picinfo.Info) error {
 		}
 		pv.RenameAsJpeg(pi)
 		pi.Size = img.Bounds().Size()
-		err = picinfo.SaveJpegImageInfo(pi, img)
-		if err != nil {
-			pv.ThumbGen(pi)
-		}
+		err = pi.SaveJpegNew(img)
+		pv.ThumbGen(pi)
 		return err
 	}
-	err := picinfo.SaveUpdatedJpeg(pi)
-	if err != nil {
-		pv.ThumbGen(pi)
-	}
+	err := pi.SaveJpegUpdated()
+	pv.ThumbGen(pi)
 	return err
 }
 
@@ -660,21 +731,98 @@ func (pv *PixView) RotateImage(pi *picinfo.Info, deg float32) error {
 		switch pi.Sup {
 		case filecat.Jpeg:
 			rawExif, _ := picinfo.OpenRawExif(pi.File)
-			picinfo.SaveJpegImageExif(pi, rawExif, img)
+			pi.SaveJpegUpdatedExif(rawExif, img)
 		case filecat.Heic:
 			rawExif, _ := picinfo.OpenRawExif(pi.File)
 			pv.RenameAsJpeg(pi)
-			picinfo.SaveJpegImageExif(pi, rawExif, img)
+			pi.SaveJpegUpdatedExif(rawExif, img)
 		default:
-			picinfo.SaveImage(pi.File, img)
+			picinfo.SaveImage(pi.File, img) // todo: need exif support for other formats..
 		}
 		pv.ThumbGen(pi)
 	} else {
 		pi.Orient = pi.Orient.Rotate(int(deg))
-		pv.SaveExifFile(pi)
+		pv.SaveExifFile(pi) // does thumbgen
 	}
 	return nil
 }
+
+// SetDateTakenSel sets the DateTaken for selected items, with given day and minute increments between each
+func (pv *PixView) SetDateTakenSel(date time.Time, dayInc int, minInc int) {
+	pis := pv.CheckSel()
+	n := len(pis)
+	if n == 0 {
+		return
+	}
+	incSec := time.Second * time.Duration(dayInc*(24*3600)+minInc*60)
+	cdt := date
+	for _, pi := range pis {
+		pv.SetDateTaken(pi, cdt)
+		cdt = cdt.Add(incSec)
+	}
+	pv.FolderFiles = nil
+	pv.DirInfo(false) // update -- also saves updated info
+}
+
+// SetDateTakenCur sets the DateTaken for single currently-selected file
+func (pv *PixView) SetDateTakenCur(date time.Time) error {
+	pi := pv.CheckCur()
+	if pi == nil {
+		return nil
+	}
+	err := pv.SetDateTaken(pi, date)
+	pv.DirInfo(false) // update -- also saves updated info
+	return err
+}
+
+// SetDateTaken sets the DateTaken for the given image and saves updated Exif metadata.
+// Saving the exif requires conversion of non-jpeg format files to Jpeg format.
+func (pv *PixView) SetDateTaken(pi *picinfo.Info, date time.Time) error {
+	pi.DateTaken = date
+	return pv.SaveExifFile(pi)
+}
+
+// ImgGridMoveDates moves image dates based on an insert event from ImgGrid
+func (pv *PixView) ImgGridMoveDates(idx int) {
+	ig := pv.ImgGrid()
+	ni := len(ig.Images) - len(pv.Thumbs)
+	nf := ig.Images[idx : idx+ni]
+	stdate := time.Time{}
+	edate := time.Time{}
+	if idx > 0 {
+		stdate = pv.Info[idx-1].DateTaken
+	}
+	if idx+ni < len(pv.Info) {
+		edate = pv.Info[idx+ni].DateTaken
+	}
+	var inc time.Duration
+	cdt := stdate
+	if !stdate.IsZero() && !edate.IsZero() {
+		inc = edate.Sub(stdate) / time.Duration(10+ni)
+		cdt = stdate.Add(5 * inc)
+	} else {
+		inc = time.Second * 60
+		if stdate.IsZero() {
+			cdt = edate.Add(-inc)
+			inc = -inc
+		} else {
+			cdt = cdt.Add(inc)
+		}
+	}
+	for _, f := range nf {
+		ii := pv.PicIdxByThumb(f)
+		if ii < 0 {
+			continue
+		}
+		pi := pv.Info[ii]
+		pv.SetDateTaken(pi, cdt)
+		cdt = cdt.Add(inc)
+	}
+	pv.DirInfo(false)
+}
+
+//////////////////////////////////////////////////////////////////
+// GoPixViewWindow
 
 // GoPixViewWindow opens an interactive editor of the given Ki tree, at its
 // root, returns PixView and window
@@ -751,14 +899,16 @@ var PixViewProps = ki.Props{
 		}},
 		{"sep-rot", ki.BlankProp{}},
 		{"RotateLeftSel", ki.Props{
-			"icon":  "rotate-left",
-			"label": "Left",
-			"desc":  "rotate selected images 90 degrees left",
+			"icon":     "rotate-left",
+			"label":    "Left",
+			"shortcut": "Command+L",
+			"desc":     "rotate selected images 90 degrees left",
 		}},
 		{"RotateRightSel", ki.Props{
-			"icon":  "rotate-right",
-			"label": "Right",
-			"desc":  "rotate selected images 90 degrees right",
+			"icon":     "rotate-right",
+			"label":    "Right",
+			"shortcut": "Command+R",
+			"desc":     "rotate selected images 90 degrees right",
 		}},
 		{"RotateSel", ki.Props{
 			"icon":  "rotate-right",
@@ -784,6 +934,16 @@ var PixViewProps = ki.Props{
 			"desc":  "save any updated exif image metadata for currently selected file(s) if they've been edited -- this will automatically change file to a Jpeg format if it is not already, as that is the only supported exif type (for now)",
 			"label": "Save Exif",
 		}},
+		{"SetDateTakenSel", ki.Props{
+			"icon":  "file-save",
+			"desc":  "sets the DateTaken, which is how files are sorted, for selected images, with spacing as given by day and minute increments between pictures -- this should only be used for images that don't have an accurate existing date (e.g., scans of old pictures)",
+			"label": "Set Date",
+			"Args": ki.PropSlice{
+				{"Date", ki.Props{}},
+				{"Day Increment", ki.Props{}},
+				{"Minute Increment", ki.Props{}},
+			},
+		}},
 	},
 	"MainMenu": ki.PropSlice{
 		{"AppMenu", ki.BlankProp{}},
@@ -795,5 +955,15 @@ var PixViewProps = ki.Props{
 		}},
 		{"Edit", "Copy Cut Paste Dupe"},
 		{"Window", "Windows"},
+	},
+	"CallMethods": ki.PropSlice{
+		{"SetDateTakenCur", ki.Props{
+			"icon":  "file-save",
+			"desc":  "sets the DateTaken",
+			"label": "Set Date",
+			"Args": ki.PropSlice{
+				{"Date", ki.Props{}},
+			},
+		}},
 	},
 }

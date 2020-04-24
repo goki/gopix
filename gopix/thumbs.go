@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/goki/gi/gi"
 	"github.com/goki/gopix/picinfo"
@@ -21,6 +22,9 @@ import (
 )
 
 const ThumbMaxSize = 256
+
+// DateFileFmt is the Time format for naming files by their timestamp
+var DateFileFmt = "2006_01_02_15_04_05"
 
 // ThumbDir returns the cache dir to use for storing thumbnails
 func (pv *PixView) ThumbDir() string {
@@ -104,6 +108,7 @@ func (pv *PixView) DirInfo(reset bool) {
 
 func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 	tdir := pv.ThumbDir()
+	adir := filepath.Join(pv.ImageDir, "All")
 	for i := st; i < ed; i++ {
 		if pv.Info[i] != nil {
 			pi := pv.Info[i]
@@ -126,8 +131,8 @@ func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 			pv.Info[i] = nil // regen
 		}
 		fn := filepath.Base(imgs[i])
-		ffn := filepath.Join(fdir, fn)
-		pi, err := picinfo.OpenExif(ffn)
+		ffn := filepath.Join(adir, fn)
+		pi, err := picinfo.OpenNewInfo(ffn)
 		if pi == nil {
 			fmt.Printf("failed exif: %v err: %v\n", fn, err)
 			continue
@@ -293,6 +298,36 @@ func (pv *PixView) UniquifyBaseNames() {
 	pv.FolderFiles = nil // done
 }
 
+// BaseNamesMap returns a map of base file names without extensions for all files
+func (pv *PixView) BaseNamesMap() map[string]string {
+	bmap := make(map[string]string, len(pv.AllInfo))
+	for fn := range pv.AllInfo {
+		fnext, _ := dirs.SplitExt(fn)
+		bmap[fnext] = fn
+	}
+	return bmap
+}
+
+// UniqueNameNumber returns a unique image number based on given datetaken, and image number
+// and BaseNamesMap
+func (pv *PixView) UniqueNameNumber(dt time.Time, num int, ext string, bmap map[string]string) (string, int) {
+	ds := dt.Format(DateFileFmt)
+	n := num
+	nfnb := fmt.Sprintf("img_%s_n%d", ds, n)
+	nfn := nfnb + ext
+	for i := n; i < 100000; i++ {
+		_, hasa := pv.AllInfo[nfn]
+		_, hasb := bmap[nfnb]
+		if !hasa && !hasb {
+			break
+		}
+		n = i
+		nfnb = fmt.Sprintf("img_%s_n%d", ds, n)
+		nfn = nfnb + ext
+	}
+	return nfn, n
+}
+
 // RenameByDate renames image files by their date taken.
 // Operates on AllInfo so must be done after that is loaded.
 func (pv *PixView) RenameByDate() {
@@ -304,38 +339,23 @@ func (pv *PixView) RenameByDate() {
 	adir := filepath.Join(pv.ImageDir, "All")
 	tdir := pv.ThumbDir()
 
-	bmap := make(map[string]string, len(pv.AllInfo))
-	for fn := range pv.AllInfo {
-		fnext, _ := dirs.SplitExt(fn)
-		bmap[fnext] = fn
-	}
+	bmap := pv.BaseNamesMap()
 
 	for fn, pi := range pv.AllInfo {
 		if pi.DateTaken.IsZero() {
 			continue
 		}
 		fnext, ext := dirs.SplitExt(fn)
-		ds := pi.DateTaken.Format("2006_01_02_15_04_05")
 		lext := strings.ToLower(ext)
+		ds := pi.DateTaken.Format(DateFileFmt)
 		n := pi.Number
 		nfnb := fmt.Sprintf("img_%s_n%d", ds, n)
 		nfn := nfnb + lext
-
 		if fn == nfn {
 			continue
 		}
 
-		for i := n; i < 100000; i++ {
-			_, hasa := pv.AllInfo[nfn]
-			_, hasb := bmap[nfnb]
-			if !hasa && !hasb {
-				break
-			}
-			n = i
-			nfnb = fmt.Sprintf("img_%s_n%d", ds, n)
-			nfn = nfnb + lext
-		}
-		pi.Number = n
+		nfn, pi.Number = pv.UniqueNameNumber(pi.DateTaken, n, lext, bmap)
 
 		// fmt.Printf("rename: %s -> %s\n", fn, nfn)
 		pv.RenameFile(fn, nfn)
