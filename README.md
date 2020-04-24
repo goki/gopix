@@ -23,5 +23,4 @@ Go picture management app, because Mac Photos bricked my entire photo library up
 
 * Duplicates detector -- move dupes to trash
 
-* Finish ImgView with auto-size and zoom keyboard commands (+ / -)
 

@@ -123,6 +123,16 @@ func (or Orientations) Rotate(deg int) Orientations {
 	return or
 }
 
+// OrientSize returns the size after image is oriented accordingly
+func (or Orientations) OrientSize(sz image.Point) image.Point {
+	osz := sz
+	switch or {
+	case Rotated90L, Rotated90R, FlippedHRotated90L, FlippedHRotated90R:
+		osz.X, osz.Y = sz.Y, sz.X
+	}
+	return osz
+}
+
 // GPSCoord is a GPS position as decimal degrees
 type GPSCoord struct {
 	Lat            float64 `desc:"latitutde as decimal degrees -- a single value in range +/-90.etc"`

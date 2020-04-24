@@ -19,6 +19,7 @@ import (
 	"github.com/goki/gi/giv"
 	"github.com/goki/gi/oswin"
 	"github.com/goki/gopix/imgrid"
+	"github.com/goki/gopix/imgview"
 	"github.com/goki/gopix/picinfo"
 	"github.com/goki/ki/dirs"
 	"github.com/goki/ki/ki"
@@ -126,7 +127,7 @@ func (pv *PixView) Config(imgdir string) {
 	ig.Config(true)
 	ig.CtxtMenuFunc = pv.ImgGridCtxtMenu
 
-	pic := tv.AddNewTab(gi.KiT_Bitmap, "Current").(*gi.Bitmap)
+	pic := tv.AddNewTab(imgview.KiT_ImgView, "Current").(*imgview.ImgView)
 	pic.SetStretchMax()
 
 	split.SetSplits(.1, .9)
@@ -171,7 +172,8 @@ func (pv *PixView) Config(imgdir string) {
 		if idx < 0 || idx >= len(pv.Info) {
 			return
 		}
-		fn := filepath.Base(pv.Info[idx].File)
+		pi := pv.Info[idx]
+		fn := filepath.Base(pi.File)
 		switch imgrid.ImgGridSignals(sig) {
 		case imgrid.ImgGridDeleted:
 			if pvv.Folder == "All" {
@@ -187,7 +189,7 @@ func (pv *PixView) Config(imgdir string) {
 			}
 			pvv.ImgGridMoveDates(idx)
 		case imgrid.ImgGridDoubleClicked:
-			pvv.ViewFile(fn)
+			pvv.ViewFile(pi)
 		}
 	})
 }
@@ -212,9 +214,9 @@ func (pv *PixView) ImgGrid() *imgrid.ImgGrid {
 	return pv.Tabs().TabByName("Images").(*imgrid.ImgGrid)
 }
 
-// CurBitmap returns the Bitmap for viewing the current file
-func (pv *PixView) CurBitmap() *gi.Bitmap {
-	return pv.Tabs().TabByName("Current").(*gi.Bitmap)
+// CurImgView returns the ImgView for viewing the current file
+func (pv *PixView) CurImgView() *imgview.ImgView {
+	return pv.Tabs().TabByName("Current").(*imgview.ImgView)
 }
 
 // ToolBar returns the toolbar widget
@@ -485,22 +487,11 @@ func (pv *PixView) UntrashFiles(files []string) {
 }
 
 // ViewFile views given file in the full-size bitmap view
-func (pv *PixView) ViewFile(fname string) {
+func (pv *PixView) ViewFile(pi *picinfo.Info) {
 	pv.Tabs().SelectTabByName("Current")
-	bm := pv.CurBitmap()
-	pi, has := pv.AllInfo[fname]
-	if !has {
-		log.Printf("weird, no info for: %v\n", fname)
-		return
-	}
-	pv.CurFile = fname
-	img, err := picinfo.OpenImage(pi.File)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	img = picinfo.OrientImage(img, pi.Orient)
-	bm.SetImage(img, 0, 0)
+	pv.CurFile = filepath.Base(pi.File)
+	iv := pv.CurImgView()
+	iv.SetInfo(pi)
 }
 
 // Duplicate duplicates image
