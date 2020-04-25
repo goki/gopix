@@ -19,8 +19,9 @@ Go picture management app, because Mac Photos bricked my entire photo library up
 
 # TODO
 
+* Duplicates detector -- move dupes to trash
+
 * Need a busy / progress bar for long-running ops.
 
-* Duplicates detector -- move dupes to trash
 
 

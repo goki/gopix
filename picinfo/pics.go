@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"path/filepath"
 	"sort"
 
 	"github.com/goki/ki/dirs"
@@ -40,11 +39,46 @@ func (pc Pics) Thumbs() []string {
 	return th
 }
 
+// IdxByFile returns the index of given File name
+func (pc Pics) IdxByFile(fname string) int {
+	for i, pi := range pc {
+		if pi.File == fname {
+			return i
+		}
+	}
+	return -1
+}
+
+// IdxByThumb returns the index of given Thumb name
+func (pc Pics) IdxByThumb(tname string) int {
+	for i, pi := range pc {
+		if pi.Thumb == tname {
+			return i
+		}
+	}
+	return -1
+}
+
 //////////////////////////////////////////////////////
 // PicMap
 
-// PicMap is a map of Info for a collection of pictures
+// PicMap is a map of Info for a collection of pictures, with the key being
+// the file name *without extension*, so it can be used with thumb or picture
+// filenames, and is consistent if the file extension is changed.
 type PicMap map[string]*Info
+
+// InfoByName returns the Info record based on file name (strips extension)
+func (pm *PicMap) InfoByName(fname string) (*Info, bool) {
+	fnext, _ := dirs.SplitExt(fname)
+	pi, has := (*pm)[fnext]
+	return pi, has
+}
+
+// Set sets the Info into the map
+func (pm *PicMap) Set(pi *Info) {
+	fnext, _ := dirs.SplitExt(pi.File)
+	(*pm)[fnext] = pi
+}
 
 // OpenJSON opens from a JSON encoded file.
 // Logs any errors.
@@ -91,11 +125,14 @@ func (pm *PicMap) SaveJSON(fname string) error {
 // These are not saved in the JSON files to conserve space.
 // Thumb is always set to a .jpg version of base file name.
 func (pm *PicMap) SetFileThumb(adir, tdir string) {
-	for fn, pi := range *pm {
-		fnext, _ := dirs.SplitExt(fn)
-		ffn := filepath.Join(adir, fn)
-		tfn := filepath.Join(tdir, fnext+".jpg")
-		pi.File = ffn
-		pi.Thumb = tfn
+	for fnext, pi := range *pm {
+		if pi.Ext == "" { // old record!
+			fnb, ext := dirs.SplitExt(fnext)
+			pi.Ext = ext
+			delete(*pm, fnext)
+			(*pm)[fnb] = pi
+			fnext = fnb
+		}
+		pi.SetFileThumbFmBase(fnext, adir, tdir)
 	}
 }

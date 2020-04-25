@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
@@ -32,7 +31,7 @@ import (
 // and currently selected view.
 type PixView struct {
 	gi.Frame
-	CurFile     string                `desc:"current file -- viewed in Current bitmap or last selected in ImgGrid"`
+	CurFile     string                `desc:"current file base name (no path, no ext) -- viewed in Current bitmap or last selected in ImgGrid"`
 	ImageDir    string                `desc:"directory with the images"`
 	Folder      string                `desc:"current folder"`
 	Folders     []string              `desc:"list of all folders, excluding All and Trash"`
@@ -160,8 +159,7 @@ func (pv *PixView) Config(imgdir string) {
 			pvv, _ := recv.Embed(KiT_PixView).(*PixView)
 			idx := data.(int)
 			if idx >= 0 && idx < len(pv.Info) {
-				fn := filepath.Base(pv.Info[idx].File)
-				pvv.CurFile = fn
+				pvv.SetCurFile(pv.Info[idx])
 			}
 		}
 	})
@@ -173,13 +171,13 @@ func (pv *PixView) Config(imgdir string) {
 			return
 		}
 		pi := pv.Info[idx]
-		fn := filepath.Base(pi.File)
+		pics := picinfo.Pics{pi}
 		switch imgrid.ImgGridSignals(sig) {
 		case imgrid.ImgGridDeleted:
 			if pvv.Folder == "All" {
-				pvv.TrashFiles([]string{fn})
+				pvv.TrashFiles(pics)
 			} else {
-				pvv.DeleteInFolder(pvv.Folder, []string{fn}) // this works for Trash too -- permanent..
+				pvv.DeleteInFolder(pvv.Folder, pics) // this works for Trash too -- permanent..
 			}
 			pvv.PicDeleteAt(idx)
 		case imgrid.ImgGridInserted:
@@ -224,45 +222,16 @@ func (pv *PixView) ToolBar() *gi.ToolBar {
 	return pv.ChildByName("toolbar", 0).(*gi.ToolBar)
 }
 
-// PicDeleteAt deletes image at given index
+// SetCurFile sets CurFile based on given Info record
+func (pv *PixView) SetCurFile(pi *picinfo.Info) {
+	pv.CurFile = pi.FileBase()
+}
+
+// PicDeleteAt deletes active Info / Thumb image at given index
 func (pv *PixView) PicDeleteAt(idx int) {
 	pv.Info = append(pv.Info[:idx], pv.Info[idx+1:]...)
 	pv.Thumbs = append(pv.Thumbs[:idx], pv.Thumbs[idx+1:]...)
 }
-
-// PicIdxByName returns the index in current Info of given file
-func (pv *PixView) PicIdxByName(fname string) int {
-	for i, pi := range pv.Info {
-		if pi.File == fname {
-			return i
-		}
-	}
-	return -1
-}
-
-// PicIdxByThumb returns the index in current Info of given thumb name
-func (pv *PixView) PicIdxByThumb(tname string) int {
-	for i, pi := range pv.Info {
-		if pi.Thumb == tname {
-			return i
-		}
-	}
-	return -1
-}
-
-// PicInsertAt inserts image(s) at given index
-// func (pv *PixView) PicInsertAt(idx int, files []string) {
-// 	ni := len(files)
-//
-// 	// nt := append(pv.Info, files...) // first append to end
-// 	// copy(nt[idx+ni:], nt[idx:])     // move stuff to end
-// 	// copy(nt[idx:], files)           // copy into position
-// 	// pv.Info = nt
-// 	nt := append(pv.Thumbs, files...) // first append to end
-// 	copy(nt[idx+ni:], nt[idx:])       // move stuff to end
-// 	copy(nt[idx:], files)             // copy into position
-// 	pv.Thumbs = nt
-// }
 
 // FileNodeSelected is called whenever tree browser has file node selected
 func (pv *PixView) FileNodeSelected(fn *giv.FileNode, tvn *FileTreeView) {
@@ -333,7 +302,7 @@ func (pv *PixView) Render2D() {
 func (pv *PixView) ImgGridCtxtMenu(m *gi.Menu, idx int) {
 	ig := pv.ImgGrid()
 	nf := len(pv.Info)
-	if idx >= nf-1 || idx < 0 {
+	if idx >= nf || idx < 0 {
 		return
 	}
 	pi := pv.Info[idx]
@@ -343,7 +312,7 @@ func (pv *PixView) ImgGridCtxtMenu(m *gi.Menu, idx int) {
 		})
 	m.AddAction(gi.ActOpts{Label: "SetDate", Data: idx},
 		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
-			pv.CurFile = filepath.Base(pi.File)
+			pv.SetCurFile(pi)
 			giv.CallMethod(pv, "SetDateTakenCur", pv.Viewport)
 		})
 	m.AddSeparator("clip")
@@ -372,12 +341,13 @@ func (pv *PixView) ImgGridCtxtMenu(m *gi.Menu, idx int) {
 //////////////////////////////////////////////////////////////////////////////////
 //  file functions
 
-// LinkToFolder creates links in given folder o given files in ../all
-func (pv *PixView) LinkToFolder(fnm string, files []string) {
+// LinkToFolder creates links in given folder o given files in ../All
+func (pv *PixView) LinkToFolder(fnm string, files picinfo.Pics) {
 	tdir := filepath.Join(pv.ImageDir, fnm)
-	for _, f := range files {
-		lf := filepath.Join(tdir, f)
-		sf := filepath.Join("../All", f)
+	for _, pi := range files {
+		fn := filepath.Base(pi.File)
+		lf := filepath.Join(tdir, fn)
+		sf := filepath.Join("../All", fn)
 		err := os.Symlink(sf, lf)
 		if err != nil {
 			log.Println(err)
@@ -394,8 +364,8 @@ func (pv *PixView) RenameFile(oldnm, newnm string) {
 	os.Rename(aofn, anfn)
 
 	sf := filepath.Join("../All", newnm)
-	for i, f := range pv.Folders {
-		fdir := filepath.Join(pv.ImageDir, f)
+	for i, fld := range pv.Folders {
+		fdir := filepath.Join(pv.ImageDir, fld)
 		rename := false
 		if pv.FolderFiles != nil {
 			fmap := pv.FolderFiles[i]
@@ -428,57 +398,61 @@ func (pv *PixView) RenameFile(oldnm, newnm string) {
 }
 
 // DeleteInFolder deletes links in folder
-func (pv *PixView) DeleteInFolder(fnm string, files []string) {
-	tdir := filepath.Join(pv.ImageDir, fnm)
-	for _, f := range files {
-		lf := filepath.Join(tdir, f)
+func (pv *PixView) DeleteInFolder(fld string, files picinfo.Pics) {
+	tdir := filepath.Join(pv.ImageDir, fld)
+	for _, pi := range files {
+		fn := filepath.Base(pi.File)
+		lf := filepath.Join(tdir, fn)
 		err := os.Remove(lf)
 		if err != nil {
 			log.Println(err)
+		}
+		if fld == "Trash" {
+			os.Remove(pi.Thumb)
+			fnb := pi.FileBase()
+			delete(pv.AllInfo, fnb)
 		}
 	}
 }
 
 // TrashFiles moves given files from All to Trash, and removes symlinks from
-// any folders
-func (pv *PixView) TrashFiles(files []string) {
+// any folders.  Does not delete from AllFiles or delete Thumb.
+// These should be full base filenames (with extensions, but no path).
+func (pv *PixView) TrashFiles(files picinfo.Pics) {
 	adir := filepath.Join(pv.ImageDir, "All")
 	tdir := filepath.Join(pv.ImageDir, "Trash")
 	os.MkdirAll(tdir, 0775)
-	fmap := make(map[string]struct{}, len(files))
-	for _, f := range files {
-		fmap[f] = struct{}{}
-		tfn := filepath.Join(tdir, f)
-		afn := filepath.Join(adir, f)
+	for _, pi := range files {
+		fn := filepath.Base(pi.File)
+		tfn := filepath.Join(tdir, fn)
+		afn := filepath.Join(adir, fn)
 		err := os.Rename(afn, tfn)
 		if err != nil {
 			log.Println(err)
 		}
+		pv.DeleteFromFolders(fn)
 	}
-	drs := dirs.Dirs(pv.ImageDir)
-	for _, d := range drs {
-		if d == "All" || d == "Trash" {
-			continue
-		}
-		dp := filepath.Join(pv.ImageDir, d)
-		dfs, _ := dirs.AllFiles(dp)
-		for _, f := range dfs {
-			fb := filepath.Base(f)
-			if _, has := fmap[fb]; has {
-				os.Remove(f)
-			}
-		}
+}
+
+// DeleteFromFolders deletes given file name (with extension, no path)
+// from all Folders.  Just does remove and ignores the errors.
+func (pv *PixView) DeleteFromFolders(fname string) {
+	fn := filepath.Base(fname)       // make sure
+	for _, fld := range pv.Folders { // easier to just try it..
+		fdir := filepath.Join(pv.ImageDir, fld)
+		os.Remove(filepath.Join(fdir, fn))
 	}
 }
 
 // UntrashFiles moves given files from Trash to All (recover from trash)
-func (pv *PixView) UntrashFiles(files []string) {
+func (pv *PixView) UntrashFiles(files picinfo.Pics) {
 	adir := filepath.Join(pv.ImageDir, "All")
 	tdir := filepath.Join(pv.ImageDir, "Trash")
 	os.MkdirAll(tdir, 0775)
-	for _, f := range files {
-		tfn := filepath.Join(tdir, f)
-		afn := filepath.Join(adir, f)
+	for _, pi := range files {
+		fn := filepath.Base(pi.File)
+		tfn := filepath.Join(tdir, fn)
+		afn := filepath.Join(adir, fn)
 		err := os.Rename(tfn, afn)
 		if err != nil {
 			log.Println(err)
@@ -489,33 +463,26 @@ func (pv *PixView) UntrashFiles(files []string) {
 // ViewFile views given file in the full-size bitmap view
 func (pv *PixView) ViewFile(pi *picinfo.Info) {
 	pv.Tabs().SelectTabByName("Current")
-	pv.CurFile = filepath.Base(pi.File)
+	pv.SetCurFile(pi)
 	iv := pv.CurImgView()
 	iv.SetInfo(pi)
 }
 
 // Duplicate duplicates image
 func (pv *PixView) Duplicate(pi *picinfo.Info) error {
-	bmap := pv.BaseNamesMap()
-	fn := filepath.Base(pi.File)
-	fnext, ext := dirs.SplitExt(fn)
-	lext := strings.ToLower(ext)
-	nfn, n := pv.UniqueNameNumber(pi.DateTaken, pi.Number, lext, bmap)
+	nfn, n := pv.UniqueNameNumber(pi.DateTaken, pi.Number)
 	npi := &picinfo.Info{}
 	*npi = *pi
 	adir := filepath.Join(pv.ImageDir, "All")
-	npi.File = filepath.Join(adir, nfn)
+	tdir := pv.ThumbDir()
 	npi.Number = n
+	npi.SetFileThumbFmBase(nfn, adir, tdir)
 	giv.CopyFile(npi.File, pi.File, 0664)
 	npi.UpdateFileMod()
-	fnext, _ = dirs.SplitExt(nfn)
-	tdir := pv.ThumbDir()
-	tfn := filepath.Join(tdir, fnext+".jpg")
-	npi.Thumb = tfn
 	giv.CopyFile(npi.Thumb, pi.Thumb, 0664)
 	pv.AllInfo[nfn] = npi
 	if pv.Folder != "All" {
-		pv.LinkToFolder(pv.Folder, []string{nfn})
+		pv.LinkToFolder(pv.Folder, picinfo.Pics{npi})
 	}
 	pv.DirInfo(false)
 	return nil
@@ -801,7 +768,7 @@ func (pv *PixView) ImgGridMoveDates(idx int) {
 		}
 	}
 	for _, f := range nf {
-		ii := pv.PicIdxByThumb(f)
+		ii := pv.Info.IdxByThumb(f)
 		if ii < 0 {
 			continue
 		}
@@ -941,6 +908,18 @@ var PixViewProps = ki.Props{
 		{"File", ki.PropSlice{
 			{"UpdateFiles", ki.Props{}},
 			{"RenameByDate", ki.Props{}},
+			{"CleanAllInfo", ki.Props{
+				"desc": "clean the info.json list of all files -- be sure to click on All dir first to make sure everything is loaded first.  Dry Run does not do anything -- just reports what would be done.",
+				"Args": ki.PropSlice{
+					{"Dry Run", ki.Props{}},
+				},
+			}},
+			{"CleanDupes", ki.Props{
+				"desc": "check for duplicates and move one of them to the trash.",
+				"Args": ki.PropSlice{
+					{"Dry Run", ki.Props{}},
+				},
+			}},
 			{"sep-close", ki.BlankProp{}},
 			{"Close Window", ki.BlankProp{}},
 		}},

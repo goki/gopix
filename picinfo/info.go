@@ -5,9 +5,12 @@
 package picinfo
 
 import (
+	"fmt"
 	"image"
+	"path/filepath"
 	"time"
 
+	"github.com/goki/ki/dirs"
 	"github.com/goki/ki/kit"
 	"github.com/goki/pi/filecat"
 )
@@ -15,6 +18,7 @@ import (
 // Info is the information about a picture / video file
 type Info struct {
 	File      string            `json:"-" desc:"full path to image file name"`
+	Ext       string            `desc:"extension of the file name"`
 	Desc      string            `desc:"image description -- can contain arbitrary user comments -- ascii encoded"`
 	FileMod   time.Time         `desc:"date when image file was modified"`
 	Sup       filecat.Supported `desc:"supported type of image file, decoded from extension, using gopi/filecat system"`
@@ -24,16 +28,100 @@ type Info struct {
 	Orient    Orientations      `desc:"orientation of the image using exif standards that include rotation and mirroring"`
 	DateTaken time.Time         `desc:"date when the image / video was taken"`
 	DateMod   time.Time         `desc:"date when image was last modified / edited"`
-	GPSLoc    GPSCoord          `desc:"GPS coordinates of location of shot"`
+	GPSLoc    GPSCoord          `view:"inline" desc:"GPS coordinates of location of shot"`
+	GPSMisc   GPSMisc           `desc:"GPS misc additional data"`
 	GPSDate   time.Time         `desc:"GPS version of the time"`
 	Exposure  Exposure          `desc:"standard exposure info"`
 	Tags      map[string]string `desc:"full set of name / value tags"`
 	Thumb     string            `json:"-" view:"-" desc:"full path to thumb file name -- e.g., encoded as a .jpg"`
+	Flagged   bool              `json:"-" view:"-" desc:"general-purpose flag state, e.g., for pruning old files"`
 }
 
-func (inf *Info) Defaults() {
-	inf.Depth = 8
+func (pi *Info) Defaults() {
+	pi.Depth = 8
 }
+
+// FileBase returns the base, no extension file name (used as Key ic PicsMap)
+func (pi *Info) FileBase() string {
+	fb := filepath.Base(pi.File)
+	fnext, _ := dirs.SplitExt(fb)
+	return fnext
+}
+
+// SetFileThumbFmBase sets the File and Thumb name based on given
+// file *base* name (no extension) and File directory, Thumb directory.
+// Ext must already have been set.
+// This is useful for initializing after loading or renaming base name.
+func (pi *Info) SetFileThumbFmBase(fnext, fdir, tdir string) {
+	fn := fnext + pi.Ext
+	ffn := filepath.Join(fdir, fn)
+	tfn := filepath.Join(tdir, fnext+".jpg")
+	pi.File = ffn
+	pi.Thumb = tfn
+}
+
+// SetFileThumbFmFile sets the File and Thumb name based on given
+// full File path name and Thumb directory. Sets Ext.
+// This is useful for creating new Info from file.
+func (pi *Info) SetFileThumbFmFile(fname, tdir string) {
+	fb := filepath.Base(pi.File)
+	fnext, ext := dirs.SplitExt(fb)
+	pi.Ext = ext
+	tfn := filepath.Join(tdir, fnext+".jpg")
+	pi.File = fname
+	pi.Thumb = tfn
+}
+
+// DiffsTo returns any differences between this and another Info record
+func (pi *Info) DiffsTo(npi *Info) []string {
+	var dl []string
+	if pi.Ext != npi.Ext {
+		dl = append(dl, fmt.Sprintf("Ext differs: %s != %s\n", pi.Ext, npi.Ext))
+	}
+	if pi.Desc != npi.Desc {
+		dl = append(dl, fmt.Sprintf("Desc differs: %s != %s\n", pi.Desc, npi.Desc))
+	}
+	if pi.FileMod != npi.FileMod {
+		dl = append(dl, fmt.Sprintf("FileMod differs: %v != %v\n", pi.FileMod, npi.FileMod))
+	}
+	if pi.Sup != npi.Sup {
+		dl = append(dl, fmt.Sprintf("Sup differs: %v != %v\n", pi.Sup, npi.Sup))
+	}
+	if pi.Number != npi.Number {
+		dl = append(dl, fmt.Sprintf("Number differs: %v != %v\n", pi.Number, npi.Number))
+	}
+	if pi.Size != npi.Size {
+		dl = append(dl, fmt.Sprintf("Size differs: %v != %v\n", pi.Size, npi.Size))
+	}
+	if pi.Depth != npi.Depth {
+		dl = append(dl, fmt.Sprintf("Depth differs: %v != %v\n", pi.Depth, npi.Depth))
+	}
+	if pi.Orient != npi.Orient {
+		dl = append(dl, fmt.Sprintf("Orient differs: %v != %v\n", pi.Orient, npi.Orient))
+	}
+	if pi.DateTaken != npi.DateTaken {
+		dl = append(dl, fmt.Sprintf("DateTaken differs: %v != %v\n", pi.DateTaken, npi.DateTaken))
+	}
+	if pi.DateMod != npi.DateMod {
+		dl = append(dl, fmt.Sprintf("DateMod differs: %v != %v\n", pi.DateMod, npi.DateMod))
+	}
+	if pi.GPSLoc != npi.GPSLoc {
+		dl = append(dl, fmt.Sprintf("GPSLoc differs: %v != %v\n", pi.GPSLoc, npi.GPSLoc))
+	}
+	if pi.GPSMisc != npi.GPSMisc {
+		dl = append(dl, fmt.Sprintf("GPSMisc differs: %v != %v\n", pi.GPSMisc, npi.GPSMisc))
+	}
+	if pi.GPSDate != npi.GPSDate {
+		dl = append(dl, fmt.Sprintf("GPSDate differs: %v != %v\n", pi.GPSDate, npi.GPSDate))
+	}
+	if pi.Exposure != npi.Exposure {
+		dl = append(dl, fmt.Sprintf("Exposure differs: %v != %v\n", pi.Exposure, npi.Exposure))
+	}
+	return dl
+}
+
+///////////////////////////////////////////////////////////////////////////////////
+//  Additional Structs
 
 // Orientations are the exif rotations and mirroring codes
 type Orientations int
@@ -135,9 +223,13 @@ func (or Orientations) OrientSize(sz image.Point) image.Point {
 
 // GPSCoord is a GPS position as decimal degrees
 type GPSCoord struct {
-	Lat            float64 `desc:"latitutde as decimal degrees -- a single value in range +/-90.etc"`
-	Long           float64 `desc:"longitude as decimal degrees -- a single value in range +/-180.etc"`
-	Alt            float64 `desc:"altitude in meters"`
+	Lat  float64 `desc:"latitutde as decimal degrees -- a single value in range +/-90.etc"`
+	Long float64 `desc:"longitude as decimal degrees -- a single value in range +/-180.etc"`
+	Alt  float64 `desc:"altitude in meters"`
+}
+
+// GPSMisc is GPS bearing and other extra data
+type GPSMisc struct {
 	DestBearing    float64 `desc:"destination bearing -- where is the phone going"`
 	DestBearingRef string  `desc:"reference for bearing:  M = magnetic, T = true north"`
 	ImgDir         float64 `desc:"image direction -- where the phone is pointing"`

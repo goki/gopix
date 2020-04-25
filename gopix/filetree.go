@@ -14,6 +14,8 @@ import (
 	"github.com/goki/gi/oswin/dnd"
 	"github.com/goki/gi/oswin/mimedata"
 	"github.com/goki/gi/units"
+	"github.com/goki/gopix/picinfo"
+	"github.com/goki/ki/dirs"
 	"github.com/goki/ki/ki"
 	"github.com/goki/ki/kit"
 )
@@ -62,12 +64,17 @@ func (ftv *FileTreeView) PixPaste(md mimedata.Mimes) {
 	if !ok {
 		return
 	}
-	var files []string
+	var files picinfo.Pics
 	nf := len(md)
 	for i := 0; i < nf; i++ {
 		d := md[i]
 		// fmt.Println(string(d.Data))
-		files = append(files, filepath.Base(string(d.Data)))
+		fn := filepath.Base(string(d.Data))
+		fnext, _ := dirs.SplitExt(fn)
+		pi, has := pv.AllInfo[fnext]
+		if has {
+			files = append(files, pi)
+		}
 	}
 
 	fnm := strings.ToLower(tfn.Nm)

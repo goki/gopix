@@ -136,6 +136,8 @@ func (ig *ImgGrid) ScrollBar() *gi.ScrollBar {
 
 // BitmapAtIdx returns the gi.Bitmap at given index
 func (ig *ImgGrid) BitmapAtIdx(idx int) *gi.Bitmap {
+	si := ig.StartIdx()
+	idx = idx - si
 	ni := ig.Size.X * ig.Size.Y
 	if idx < 0 || idx >= ni {
 		return nil
@@ -556,17 +558,8 @@ func (ig *ImgGrid) IsIdxVisible(idx int) bool {
 
 // IdxPos returns center of window position of index label for idx (ContextMenuPos)
 func (ig *ImgGrid) IdxPos(idx int) image.Point {
-	si := ig.StartIdx()
-	bi := idx - si
-	if bi < 0 {
-		bi = 0
-	}
-	ni := ig.Size.X * ig.Size.Y
-	if bi > ni-1 {
-		bi = ni - 1
-	}
-	var pos image.Point
-	bm := ig.BitmapAtIdx(bi)
+	pos := ig.Viewport.Win.EventMgr.LastMousePos
+	bm := ig.BitmapAtIdx(idx)
 	if bm != nil {
 		pos = bm.ContextMenuPos()
 	}
@@ -753,12 +746,12 @@ func (ig *ImgGrid) SelectIdxAction(idx int, mode mouse.SelectModes) {
 			ig.SelectIdx(idx)
 			if idx < minIdx {
 				for cidx < minIdx {
-					r := ig.MoveDown(mouse.SelectQuiet) // just select
+					r := ig.MoveNext(mouse.SelectQuiet) // just select
 					cidx = r
 				}
 			} else if idx > maxIdx {
 				for cidx > maxIdx {
-					r := ig.MoveUp(mouse.SelectQuiet) // just select
+					r := ig.MovePrev(mouse.SelectQuiet) // just select
 					cidx = r
 				}
 			}
