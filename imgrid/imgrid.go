@@ -149,8 +149,10 @@ func (ig *ImgGrid) BitmapAtIdx(idx int) *gi.Bitmap {
 // ImageDeleteAt deletes image at given index
 func (ig *ImgGrid) ImageDeleteAt(idx int) {
 	// img := ig.Images[idx]
-	ig.Images = append(ig.Images[:idx], ig.Images[idx+1:]...)
-	ig.ImageSig.Emit(ig.This(), int64(ImgGridDeleted), idx)
+	if idx < len(ig.Images) {
+		ig.Images = append(ig.Images[:idx], ig.Images[idx+1:]...)
+		ig.ImageSig.Emit(ig.This(), int64(ImgGridDeleted), idx)
+	}
 }
 
 // ImageInsertAt inserts image(s) at given index
@@ -357,8 +359,8 @@ func (ig *ImgGrid) ImgGridEvents() {
 			igg.DragNDropStart()
 		case dnd.DropOnTarget:
 			igg.DragNDropTarget(de)
-		case dnd.DropFmSource:
-			igg.DragNDropSource(de)
+			// case dnd.DropFmSource: // don't do this -- only targets!
+			// 	igg.DragNDropSource(de)
 		}
 	})
 	gr.ConnectEvent(oswin.DNDFocusEvent, gi.RegPri, func(recv, send ki.Ki, sig int64, d interface{}) {

@@ -5,11 +5,11 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"image"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -85,7 +85,7 @@ func (pv *PixView) DirInfo(reset bool) {
 	}
 
 	nfl = len(imgs)
-	// fmt.Printf("First pass done, now N files %d\n", nfl)
+	pv.PProg.Start(nfl)
 
 	ncp := runtime.NumCPU()
 	nper := nfl / ncp
@@ -129,8 +129,9 @@ func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 				if err != nil {
 					log.Printf("missing file %s: err: %s\n", pi.File, err)
 				} else {
-					if pi.FileMod.Before(fst.ModTime()) {
+					if !pi.FileMod.Before(fst.ModTime()) {
 						if !pi.DateTaken.IsZero() {
+							pv.PProg.Step()
 							continue
 						}
 						fmt.Printf("redoing thumb to update date taken: %v\n", pi.File)
@@ -148,6 +149,7 @@ func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 		pi, err := picinfo.OpenNewInfo(ffn)
 		if pi == nil {
 			fmt.Printf("File: %s failed Info open: err: %v\n", fn, err)
+			pv.PProg.Step()
 			continue
 		}
 		num, has := pv.NumberFromFname(fnext)
@@ -165,6 +167,7 @@ func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 			pi.Thumb = ""
 			log.Println(err)
 		}
+		pv.PProg.Step()
 	}
 	pv.WaitGp.Done()
 }
@@ -239,9 +242,13 @@ func (pv *PixView) OpenAllInfo() error {
 
 // SaveAllInfo save cached info on all pictures
 func (pv *PixView) SaveAllInfo() error {
+	if len(pv.AllInfo) == 0 {
+		return nil
+	}
+	ifn := filepath.Join(pv.ImageDir, "info.json")
+	os.Rename(ifn, ifn+"~")
 	pv.AllMu.Lock()
 	defer pv.AllMu.Unlock()
-	ifn := filepath.Join(pv.ImageDir, "info.json")
 	err := pv.AllInfo.SaveJSON(ifn)
 	return err
 }
@@ -280,7 +287,11 @@ func (pv *PixView) UniquifyBaseNames() {
 		fmt.Println(err)
 		return
 	}
-	imgs = imgs[1:]                   // first one is the directory itself
+	imgs = imgs[1:] // first one is the directory itself
+
+	mx := len(imgs)
+	pv.PProg.Start(mx)
+
 	bmap := make(map[string][]string) // base map of all versions
 	for _, img := range imgs {
 		fn := filepath.Base(img)
@@ -292,6 +303,7 @@ func (pv *PixView) UniquifyBaseNames() {
 		} else {
 			bmap[fnext] = []string{fn}
 		}
+		pv.PProg.Step()
 	}
 
 	rmap := make(map[string]string) // rename map
@@ -355,39 +367,47 @@ func (pv *PixView) UniqueNameNumber(dt time.Time, num int) (string, int) {
 // RenameByDate renames image files by their date taken.
 // Operates on AllInfo so must be done after that is loaded.
 func (pv *PixView) RenameByDate() {
-	fmt.Printf("Renaming files by their DateTaken...\n")
-
 	pv.UpdateFolders()
 	pv.GetFolderFiles() // greatly speeds up rename
 
 	adir := filepath.Join(pv.ImageDir, "All")
 	tdir := pv.ThumbDir()
 
+	pv.PProg.Start(len(pv.AllInfo))
 	for fn, pi := range pv.AllInfo {
 		if pi.DateTaken.IsZero() {
+			pv.PProg.Step()
 			continue
 		}
 		ds := pi.DateTaken.Format(DateFileFmt)
 		n := pi.Number
 		nfn := fmt.Sprintf("img_%s_n%d", ds, n)
 		if fn == nfn {
+			pv.PProg.Step()
 			continue
 		}
-		ofn := pi.File
+		ofn := filepath.Base(pi.File)
 		otf := pi.Thumb
 
-		nfn, pi.Number = pv.UniqueNameNumber(pi.DateTaken, n)
+		opi := &picinfo.Info{}
+		*opi = *pi
+
+		nfn, pi.Number = pv.UniqueNameNumber(pi.DateTaken, 0)
 		pi.SetFileThumbFmBase(nfn, adir, tdir)
 
+		nfb := filepath.Base(pi.File)
+
+		fmt.Printf("renaming %s => %s\n", ofn, nfb)
 		// fmt.Printf("rename: %s -> %s\n", fn, nfn)
-		pv.RenameFile(ofn, pi.File)
+		pv.RenameFile(ofn, nfb)
 		os.Rename(otf, pi.Thumb)
 
 		delete(pv.AllInfo, fn)
 		pv.AllInfo[nfn] = pi
+		pv.PProg.Step()
 	}
 	fmt.Println("...Done\n")
-	gi.PromptDialog(nil, gi.DlgOpts{Title: "Done", Prompt: "Done Renaming by Date"}, gi.AddOk, gi.NoCancel, nil, nil)
+	// gi.PromptDialog(nil, gi.DlgOpts{Title: "Done", Prompt: "Done Renaming by Date"}, gi.AddOk, gi.NoCancel, nil, nil)
 	pv.DirInfo(false)
 	pv.FolderFiles = nil
 	return
@@ -398,20 +418,61 @@ func (pv *PixView) CleanAllInfo(dryRun bool) {
 	adir := filepath.Join(pv.ImageDir, "All")
 	pv.UpdateFolders()
 
-	pv.AllMu.Lock()
 	imgs, err := dirs.AllFiles(adir)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	imgs = imgs[1:] // first one is the directory itself
-	for _, img := range imgs {
+
+	nfl := len(imgs)
+	pv.PProg.Start(nfl)
+
+	ncp := runtime.NumCPU()
+	nper := nfl / ncp
+	st := 0
+	for i := 0; i < ncp; i++ {
+		ed := st + nper
+		if i == ncp-1 {
+			ed = nfl
+		}
+		go pv.CleanAllInfoThr(dryRun, imgs, st, ed)
+		pv.WaitGp.Add(1)
+		st = ed
+	}
+	pv.WaitGp.Wait()
+	for fnext, pi := range pv.AllInfo {
+		if pi.Flagged {
+			pi.Flagged = false
+			continue
+		}
+		fmt.Printf("File was not found, will be deleted from list: %s\n", pi.File)
+		if dryRun {
+			continue
+		}
+		delete(pv.AllInfo, fnext)
+	}
+	pv.SaveAllInfo()
+	fmt.Println("...Done\n")
+	gi.PromptDialog(nil, gi.DlgOpts{Title: "Done", Prompt: "Done Cleaning AllInfo"}, gi.AddOk, gi.NoCancel, nil, nil)
+}
+
+func (pv *PixView) CleanAllInfoThr(dryRun bool, imgs []string, st, ed int) {
+	for i := st; i < ed; i++ {
+		img := imgs[i]
+		typ := filecat.SupportedFromFile(img)
+		if typ.Cat() != filecat.Image { // todo: movies!
+			pv.PProg.Step()
+			continue
+		}
 		fn := filepath.Base(img)
 		fnext, _ := dirs.SplitExt(fn)
+		pv.AllMu.Lock()
 		pi, has := pv.AllInfo[fnext]
+		pv.AllMu.Unlock()
 		if !has {
-			fmt.Printf("missing: click on All first! %s\n", fn)
-			return
+			fmt.Printf("Missing file: click on All first to ensure all files loaded! %s\n", fn)
+			break
 		}
 		npi, err := picinfo.OpenNewInfo(pi.File)
 		if err != nil {
@@ -420,6 +481,7 @@ func (pv *PixView) CleanAllInfo(dryRun bool) {
 				pv.TrashFiles(picinfo.Pics{pi})
 				os.Remove(pi.Thumb)
 			}
+			pv.PProg.Step()
 			continue
 		}
 		num, has := pv.NumberFromFname(fnext)
@@ -436,22 +498,7 @@ func (pv *PixView) CleanAllInfo(dryRun bool) {
 
 		pi.Flagged = true // mark as good
 	}
-
-	for fnext, pi := range pv.AllInfo {
-		if pi.Flagged {
-			continue
-		}
-		fmt.Printf("File was not found, will be deleted from list: %s\n", pi.File)
-		if dryRun {
-			continue
-		}
-		delete(pv.AllInfo, fnext)
-	}
-	pv.AllMu.Unlock()
-	pv.SaveAllInfo()
-	fmt.Println("...Done\n")
-	gi.PromptDialog(nil, gi.DlgOpts{Title: "Done", Prompt: "Done Cleaning AllInfo"}, gi.AddOk, gi.NoCancel, nil, nil)
-	pv.DirInfo(false)
+	pv.WaitGp.Done()
 }
 
 // CleanDupes checks for duplicate files based on file sizes
@@ -461,12 +508,16 @@ func (pv *PixView) CleanDupes(dryRun bool) {
 
 	smap := make(map[int64]picinfo.Pics, len(pv.AllInfo))
 
+	smax := int64(0)
 	for _, pi := range pv.AllInfo {
 		fi, err := os.Stat(pi.Thumb)
 		if err != nil {
 			continue
 		}
 		sz := fi.Size()
+		if sz > smax {
+			smax = sz
+		}
 		pis, has := smap[sz]
 		if has {
 			pis = append(pis, pi)
@@ -476,29 +527,96 @@ func (pv *PixView) CleanDupes(dryRun bool) {
 		}
 	}
 
-	for _, pis := range smap {
+	mx := len(smap)
+	pv.PProg.Start(mx)
+
+	szs := make([]int64, mx)
+	idx := 0
+	for sz := range smap {
+		szs[idx] = sz
+		idx++
+	}
+
+	ncp := runtime.NumCPU()
+	nper := mx / ncp
+	st := 0
+	for i := 0; i < ncp; i++ {
+		ed := st + nper
+		if i == ncp-1 {
+			ed = mx
+		}
+		go pv.CleanDupesThr(dryRun, smax, szs, smap, st, ed)
+		pv.WaitGp.Add(1)
+		st = ed
+	}
+	pv.WaitGp.Wait()
+	pv.SaveAllInfo()
+	fmt.Println("...Done\n")
+	gi.PromptDialog(nil, gi.DlgOpts{Title: "Done", Prompt: "Done Cleaning Duplicates"}, gi.AddOk, gi.NoCancel, nil, nil)
+	pv.DirInfo(false)
+}
+
+func (pv *PixView) CleanDupesThr(dryRun bool, smax int64, szs []int64, smap map[int64]picinfo.Pics, st, ed int) {
+	b1 := bytes.NewBuffer(make([]byte, 0, smax))
+	b2 := bytes.NewBuffer(make([]byte, 0, smax))
+	for si := st; si < ed; si++ {
+		sz := szs[si]
+		pis := smap[sz]
 		if len(pis) <= 1 {
+			pv.PProg.Step()
 			continue
 		}
 		npi := len(pis)
+		did := false
 		for i, pi := range pis {
+			f1, err := os.Open(pi.File)
+			if err != nil {
+				log.Println(err)
+				continue
+			}
+			b1.Reset()
+			_, err = b1.ReadFrom(f1)
+			if err != nil {
+				f1.Close()
+				log.Println(err)
+				continue
+			}
+			f1.Close()
+
 			for j := i + 1; j < npi; j++ {
 				opi := pis[j]
-				cmd := exec.Command("cmp", "-s", pi.File, opi.File)
-				_, err := cmd.CombinedOutput()
-				if err == nil {
+				f2, err := os.Open(opi.File)
+				if err != nil {
+					log.Println(err)
+					continue
+				}
+				b2.Reset()
+				_, err = b2.ReadFrom(f2)
+				if err != nil {
+					f2.Close()
+					log.Println(err)
+					continue
+				}
+				f2.Close()
+				if bytes.Equal(b1.Bytes(), b2.Bytes()) {
 					fmt.Printf("duplicates: %s == %s\n", filepath.Base(pi.File), filepath.Base(opi.File))
+					did = true
+					if !dryRun {
+						if pi.Number < opi.Number {
+							pv.TrashFiles(picinfo.Pics{opi})
+						} else if pi.Number > opi.Number {
+							pv.TrashFiles(picinfo.Pics{pi})
+						} else {
+							pv.TrashFiles(picinfo.Pics{opi})
+						}
+					}
 				}
 			}
+			if did {
+				break
+			}
 		}
-		// if dryRun {
-		// 	continue
-		// }
-		// delete(pv.AllInfo, fnext)
+		pv.PProg.Step()
 	}
-
-	// pv.SaveAllInfo()
-	fmt.Println("...Done\n")
-	gi.PromptDialog(nil, gi.DlgOpts{Title: "Done", Prompt: "Done Checking for Duplicates"}, gi.AddOk, gi.NoCancel, nil, nil)
-	pv.DirInfo(false)
+	pv.WaitGp.Done()
 }
