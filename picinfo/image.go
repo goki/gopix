@@ -85,7 +85,7 @@ func OpenImage(fname string) (image.Image, error) {
 		img, err = OpenImageAuto(fname)
 	}
 	if err != nil {
-		log.Println(err)
+		log.Printf("File: %s  picinfo.OpenImage Error: %v\n", fname, err)
 	}
 	return img, err
 }

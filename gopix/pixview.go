@@ -17,6 +17,7 @@ import (
 	"github.com/goki/gi/gi"
 	"github.com/goki/gi/giv"
 	"github.com/goki/gi/oswin"
+	"github.com/goki/gi/units"
 	"github.com/goki/gopix/imgrid"
 	"github.com/goki/gopix/imgview"
 	"github.com/goki/gopix/picinfo"
@@ -24,6 +25,7 @@ import (
 	"github.com/goki/ki/ki"
 	"github.com/goki/ki/kit"
 	"github.com/goki/ki/sliceclone"
+	"github.com/goki/mat32"
 	"github.com/goki/pi/filecat"
 )
 
@@ -42,6 +44,7 @@ type PixView struct {
 	AllMu       sync.Mutex            `desc:"mutex protecting AllInfo"`
 	Thumbs      []string              `view:"-" desc:"desc list of all thumb files in current folder -- sent to ImgGrid -- must be in 1-to-1 order with Info"`
 	WaitGp      sync.WaitGroup        `view:"-" desc:"wait group for synchronizing threaded layer calls"`
+	PProg       PProg                 `view:"-" desc:"parallel progress monitor"`
 }
 
 var KiT_PixView = kit.Types.AddType(&PixView{}, PixViewProps)
@@ -106,12 +109,23 @@ func (pv *PixView) Config(imgdir string) {
 
 	// do all file-level updating now
 	pv.UpdateFolders()
-	pv.UniquifyBaseNames()
-	pv.OpenAllInfo()
 
 	pv.Lay = gi.LayoutVert
 	pv.SetProp("spacing", gi.StdDialogVSpaceUnits)
-	gi.AddNewToolBar(pv, "toolbar")
+	tbar := gi.AddNewLayout(pv, "topbar", gi.LayoutHoriz)
+	tbar.SetStretchMaxWidth()
+	gi.AddNewToolBar(tbar, "toolbar")
+	prog := gi.AddNewScrollBar(tbar, "progress")
+	prog.Dim = mat32.X
+	prog.Defaults()
+	prog.SetMinPrefWidth(units.NewEm(20))
+	prog.SetMinPrefHeight(units.NewEm(1))
+	prog.Min = 0
+	prog.Max = 1
+	prog.ThumbVal = 1
+	prog.Value = 0
+	prog.SetInactive()
+	pv.PProg.Bar = prog
 	split := gi.AddNewSplitView(pv, "splitview")
 
 	ftfr := gi.AddNewFrame(split, "filetree", gi.LayoutVert)
@@ -219,7 +233,12 @@ func (pv *PixView) CurImgView() *imgview.ImgView {
 
 // ToolBar returns the toolbar widget
 func (pv *PixView) ToolBar() *gi.ToolBar {
-	return pv.ChildByName("toolbar", 0).(*gi.ToolBar)
+	return pv.ChildByName("topbar", 0).ChildByName("toolbar", 0).(*gi.ToolBar)
+}
+
+// ProgBar returns the progress indicator
+func (pv *PixView) ProgBar() *gi.ScrollBar {
+	return pv.ChildByName("topbar", 0).ChildByName("progress", 1).(*gi.ScrollBar)
 }
 
 // SetCurFile sets CurFile based on given Info record
@@ -356,8 +375,10 @@ func (pv *PixView) LinkToFolder(fnm string, files picinfo.Pics) {
 }
 
 // RenameFile renames file in All and any folders where it might be linked
-// input is just the file name, no path
+// input is just the file name, no path (base is taken anyway in precaution)
 func (pv *PixView) RenameFile(oldnm, newnm string) {
+	oldnm = filepath.Base(oldnm)
+	newnm = filepath.Base(newnm)
 	adir := filepath.Join(pv.ImageDir, "All")
 	aofn := filepath.Join(adir, oldnm)
 	anfn := filepath.Join(adir, newnm)
@@ -663,8 +684,10 @@ func (pv *PixView) RotateSel(deg float32) {
 	if n == 0 {
 		return
 	}
+	pv.PProg.Start(len(pis))
 	for _, pi := range pis {
 		pv.RotateImage(pi, deg)
+		pv.PProg.Step()
 	}
 	pv.FolderFiles = nil
 	pv.DirInfo(false) // update -- also saves updated info
@@ -714,9 +737,11 @@ func (pv *PixView) SetDateTakenSel(date time.Time, dayInc int, minInc int) {
 	}
 	incSec := time.Second * time.Duration(dayInc*(24*3600)+minInc*60)
 	cdt := date
+	pv.PProg.Start(len(pis))
 	for _, pi := range pis {
 		pv.SetDateTaken(pi, cdt)
 		cdt = cdt.Add(incSec)
+		pv.PProg.Step()
 	}
 	pv.FolderFiles = nil
 	pv.DirInfo(false) // update -- also saves updated info
@@ -831,6 +856,8 @@ func GoPixViewWindow(path string) (*PixView, *gi.Window) {
 
 	vp.UpdateEndNoSig(updt)
 	win.GoStartEventLoop() // in a separate goroutine
+	pv.UniquifyBaseNames()
+	pv.OpenAllInfo()
 	return pv, win
 }
 
@@ -907,15 +934,18 @@ var PixViewProps = ki.Props{
 		{"AppMenu", ki.BlankProp{}},
 		{"File", ki.PropSlice{
 			{"UpdateFiles", ki.Props{}},
-			{"RenameByDate", ki.Props{}},
+			{"RenameByDate", ki.Props{
+				"desc":    "Rename files by their date taken -- be sure to click on All first to ensure current files are loaded.",
+				"confirm": true,
+			}},
 			{"CleanAllInfo", ki.Props{
-				"desc": "clean the info.json list of all files -- be sure to click on All dir first to make sure everything is loaded first.  Dry Run does not do anything -- just reports what would be done.",
+				"desc": "Clean the info.json list of all files -- be sure to click on All dir first to make sure everything is loaded first.  Dry Run does not do anything -- just reports what would be done.",
 				"Args": ki.PropSlice{
 					{"Dry Run", ki.Props{}},
 				},
 			}},
 			{"CleanDupes", ki.Props{
-				"desc": "check for duplicates and move one of them to the trash.",
+				"desc": "Check for duplicates and move one of them to the trash -- go to the Trash folder afterward and select all and delete to permanently delete.",
 				"Args": ki.PropSlice{
 					{"Dry Run", ki.Props{}},
 				},

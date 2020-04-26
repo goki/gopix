@@ -19,9 +19,10 @@ Go picture management app, because Mac Photos bricked my entire photo library up
 
 # TODO
 
-* Duplicates detector -- move dupes to trash
+* add refresh from exif button
 
-* Need a busy / progress bar for long-running ops.
+* select-all
 
+* full nav keys for Current view: forward / back / delete and Ctrl+O file to folder -- should be able to just key through that and do all processing there.
 
 
