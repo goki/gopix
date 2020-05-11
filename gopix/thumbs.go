@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/anthonynsimon/bild/clone"
 	"github.com/goki/gi/gi"
 	"github.com/goki/gopix/picinfo"
 	"github.com/goki/ki/dirs"
@@ -210,7 +211,10 @@ func (pv *PixView) ThumbGen(pi *picinfo.Info) error {
 	img = gi.ImageResizeMax(img, ThumbMaxSize)
 	img = picinfo.OrientImage(img, pi.Orient)
 	isz := img.Bounds().Size()
-	rgb := img.(*image.RGBA)
+	rgb, ok := img.(*image.RGBA)
+	if !ok {
+		rgb = clone.AsRGBA(img)
+	}
 	tr := &gi.TextRender{}
 	rs := &gi.RenderState{}
 	rs.Init(isz.X, isz.Y, rgb)
