@@ -162,7 +162,7 @@ func (pi *Info) ParseRawExif(rawExif []byte) {
 		entries = append(entries, entry)
 		return nil
 	}
-	_, err := exif.Visit(exifcommon.IfdStandard, im, ti, rawExif, visitor)
+	_, _, err := exif.Visit(exifcommon.IfdStandard, im, ti, rawExif, visitor)
 	lat := [4]float64{}
 	long := [4]float64{}
 	var gpstime []float64
