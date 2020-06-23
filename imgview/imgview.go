@@ -104,6 +104,15 @@ func (iv *ImgView) ConnectEvents2D() {
 }
 
 func (iv *ImgView) ImgViewEvents() {
+	iv.ImgViewMouseEvents()
+	iv.ConnectEvent(oswin.KeyChordEvent, gi.HiPri, func(recv, send ki.Ki, sig int64, d interface{}) {
+		ivv := recv.Embed(KiT_ImgView).(*ImgView)
+		kt := d.(*key.ChordEvent)
+		ivv.KeyInput(kt)
+	})
+}
+
+func (iv *ImgView) ImgViewMouseEvents() {
 	iv.ConnectEvent(oswin.MouseEvent, gi.LowRawPri, func(recv, send ki.Ki, sig int64, d interface{}) {
 		me := d.(*mouse.Event)
 		ivv := recv.Embed(KiT_ImgView).(*ImgView)
@@ -120,35 +129,6 @@ func (iv *ImgView) ImgViewEvents() {
 			// 	me.SetProcessed()
 		}
 	})
-	iv.ConnectEvent(oswin.KeyChordEvent, gi.HiPri, func(recv, send ki.Ki, sig int64, d interface{}) {
-		ivv := recv.Embed(KiT_ImgView).(*ImgView)
-		kt := d.(*key.ChordEvent)
-		ivv.KeyInput(kt)
-	})
-	// iv.ConnectEvent(oswin.DNDEvent, gi.RegPri, func(recv, send ki.Ki, sig int64, d interface{}) {
-	// 	de := d.(*dnd.Event)
-	// 	ivv := recv.Embed(KiT_ImgView).(*ImgView)
-	// 	switch de.Action {
-	// 	case dnd.Start:
-	// 		ivv.DragNDropStart()
-	// 	case dnd.DropOnTarget:
-	// 		ivv.DragNDropTarget(de)
-	// 	case dnd.DropFmSource:
-	// 		ivv.DragNDropSource(de)
-	// 	}
-	// })
-	// gr.ConnectEvent(oswin.DNDFocusEvent, gi.RegPri, func(recv, send ki.Ki, sig int64, d interface{}) {
-	// 	de := d.(*dnd.FocusEvent)
-	// 	sgg := recv.Embed(gi.KiT_Layout).(*gi.Layout)
-	// 	switch de.Action {
-	// 	case dnd.Enter:
-	// 		sgg.Viewport.Win.DNDSetCursor(de.Mod)
-	// 	case dnd.Exit:
-	// 		sgg.Viewport.Win.DNDNotCursor()
-	// 	case dnd.Hover:
-	// 		// nothing here?
-	// 	}
-	// })
 }
 
 func (iv *ImgView) KeyInput(kt *key.ChordEvent) {

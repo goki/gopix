@@ -23,6 +23,7 @@ Go picture management app, because Mac Photos bricked my entire photo library up
 
 * select-all
 
-* full nav keys for Current view: forward / back / delete and Ctrl+O file to folder -- should be able to just key through that and do all processing there.
+* new folder toolbar action
+
 
 
