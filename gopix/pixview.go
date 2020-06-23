@@ -17,9 +17,9 @@ import (
 	"github.com/goki/gi/gi"
 	"github.com/goki/gi/giv"
 	"github.com/goki/gi/oswin"
+	"github.com/goki/gi/oswin/mouse"
 	"github.com/goki/gi/units"
 	"github.com/goki/gopix/imgrid"
-	"github.com/goki/gopix/imgview"
 	"github.com/goki/gopix/picinfo"
 	"github.com/goki/ki/dirs"
 	"github.com/goki/ki/ki"
@@ -34,6 +34,7 @@ import (
 type PixView struct {
 	gi.Frame
 	CurFile     string                `desc:"current file base name (no path, no ext) -- viewed in Current bitmap or last selected in ImgGrid"`
+	CurIdx      int                   `desc:"index of current file in Info list"`
 	ImageDir    string                `desc:"directory with the images"`
 	Folder      string                `desc:"current folder"`
 	Folders     []string              `desc:"list of all folders, excluding All and Trash"`
@@ -140,7 +141,8 @@ func (pv *PixView) Config(imgdir string) {
 	ig.Config(true)
 	ig.CtxtMenuFunc = pv.ImgGridCtxtMenu
 
-	pic := tv.AddNewTab(imgview.KiT_ImgView, "Current").(*imgview.ImgView)
+	pic := tv.AddNewTab(KiT_ImgView, "Current").(*ImgView)
+	pic.PixView = pv
 	pic.SetStretchMax()
 
 	split.SetSplits(.1, .9)
@@ -173,7 +175,7 @@ func (pv *PixView) Config(imgdir string) {
 			pvv, _ := recv.Embed(KiT_PixView).(*PixView)
 			idx := data.(int)
 			if idx >= 0 && idx < len(pv.Info) {
-				pvv.SetCurFile(pv.Info[idx])
+				pvv.SetCurFile(pv.Info[idx], idx)
 			}
 		}
 	})
@@ -201,7 +203,7 @@ func (pv *PixView) Config(imgdir string) {
 			}
 			pvv.ImgGridMoveDates(idx)
 		case imgrid.ImgGridDoubleClicked:
-			pvv.ViewFile(pi)
+			pvv.ViewFile(pi, idx)
 		}
 	})
 }
@@ -227,8 +229,8 @@ func (pv *PixView) ImgGrid() *imgrid.ImgGrid {
 }
 
 // CurImgView returns the ImgView for viewing the current file
-func (pv *PixView) CurImgView() *imgview.ImgView {
-	return pv.Tabs().TabByName("Current").(*imgview.ImgView)
+func (pv *PixView) CurImgView() *ImgView {
+	return pv.Tabs().TabByName("Current").(*ImgView)
 }
 
 // ToolBar returns the toolbar widget
@@ -241,9 +243,10 @@ func (pv *PixView) ProgBar() *gi.ScrollBar {
 	return pv.ChildByName("topbar", 0).ChildByName("progress", 1).(*gi.ScrollBar)
 }
 
-// SetCurFile sets CurFile based on given Info record
-func (pv *PixView) SetCurFile(pi *picinfo.Info) {
+// SetCurFile sets CurFile based on given Info record, at given index in pi.Info
+func (pv *PixView) SetCurFile(pi *picinfo.Info, idx int) {
 	pv.CurFile = pi.FileBase()
+	pv.CurIdx = idx
 }
 
 // PicDeleteAt deletes active Info / Thumb image at given index
@@ -331,7 +334,7 @@ func (pv *PixView) ImgGridCtxtMenu(m *gi.Menu, idx int) {
 		})
 	m.AddAction(gi.ActOpts{Label: "SetDate", Data: idx},
 		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
-			pv.SetCurFile(pi)
+			pv.SetCurFile(pi, idx)
 			giv.CallMethod(pv, "SetDateTakenCur", pv.Viewport)
 		})
 	m.AddSeparator("clip")
@@ -481,10 +484,91 @@ func (pv *PixView) UntrashFiles(files picinfo.Pics) {
 	}
 }
 
+// DeleteCurPic deletes the currently-viewed file (CurFile, CurIdx)
+func (pv *PixView) DeleteCurPic() {
+	pic := pv.CheckCur()
+	if pic == nil {
+		return
+	}
+	pics := picinfo.Pics{pic}
+	if pv.Folder == "All" {
+		pv.TrashFiles(pics)
+	} else {
+		pv.DeleteInFolder(pv.Folder, pics) // this works for Trash too -- permanent..
+	}
+	pv.PicDeleteAt(pv.CurIdx)
+}
+
 // ViewFile views given file in the full-size bitmap view
-func (pv *PixView) ViewFile(pi *picinfo.Info) {
+func (pv *PixView) ViewFile(pi *picinfo.Info, idx int) {
+	ig := pv.ImgGrid()
+	ig.SelectIdxAction(idx, mouse.SelectOne) // ensure grid always shows current
 	pv.Tabs().SelectTabByName("Current")
-	pv.SetCurFile(pi)
+	pv.SetCurFile(pi, idx)
+	iv := pv.CurImgView()
+	iv.SetInfo(pi)
+}
+
+// ViewNext views the next file in the list relative to CurIdx.
+// returns false if at end
+func (pv *PixView) ViewNext() bool {
+	nf := len(pv.Info)
+	if nf == 0 {
+		return false
+	}
+	nx := pv.CurIdx + 1
+	if nx >= nf {
+		return false
+	}
+	ig := pv.ImgGrid()
+	ig.SelectIdxAction(nx, mouse.SelectOne) // ensure grid always shows current
+	pi := pv.Info[nx]
+	pv.Tabs().SelectTabByName("Current")
+	pv.SetCurFile(pi, nx)
+	iv := pv.CurImgView()
+	iv.SetInfo(pi)
+	return true
+}
+
+// ViewPrev views the previous file in the list relative to CurIdx.
+// returns false if at start
+func (pv *PixView) ViewPrev() bool {
+	nf := len(pv.Info)
+	if nf == 0 {
+		return true
+	}
+	if pv.CurIdx >= nf {
+		pv.CurIdx = nf - 1
+	}
+	nx := pv.CurIdx - 1
+	if nx < 0 {
+		return true
+	}
+	ig := pv.ImgGrid()
+	ig.SelectIdxAction(nx, mouse.SelectOne) // ensure grid always shows current
+	pi := pv.Info[nx]
+	pv.Tabs().SelectTabByName("Current")
+	pv.SetCurFile(pi, nx)
+	iv := pv.CurImgView()
+	iv.SetInfo(pi)
+	return true
+}
+
+// ViewRefresh re-displays current image (i.e., after change)
+func (pv *PixView) ViewRefresh() {
+	nf := len(pv.Info)
+	if nf == 0 {
+		return
+	}
+	if pv.CurIdx >= nf {
+		pv.CurIdx = nf - 1
+	}
+	if pv.CurIdx < 0 {
+		pv.CurIdx = 0
+	}
+	pi := pv.Info[pv.CurIdx]
+	pv.Tabs().SelectTabByName("Current")
+	pv.SetCurFile(pi, pv.CurIdx)
 	iv := pv.CurImgView()
 	iv.SetInfo(pi)
 }
