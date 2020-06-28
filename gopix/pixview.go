@@ -671,6 +671,21 @@ func (pv *PixView) InfoCur() {
 	pv.InfoFile(pi)
 }
 
+// NewFolder creates a new folder of the given name
+func (pv *PixView) NewFolder(fname string) {
+	np := filepath.Join(pv.ImageDir, fname)
+	os.Mkdir(np, 0775)
+	pv.UpdateFolders()
+}
+
+// EmptyTrash deletes all files in the trash
+func (pv *PixView) EmptyTrash() {
+	pv.Folder = "Trash"
+	pv.DirInfo(true)
+	pv.DeleteInFolder(pv.Folder, pv.Info)
+	pv.DirInfo(true)
+}
+
 // InfoFile shows metadata info about current file
 func (pv *PixView) InfoFile(pi *picinfo.Info) {
 	giv.StructViewDialog(pv.Viewport, pi, giv.DlgOpts{Title: "Picture Info: " + pi.File}, nil, nil)
@@ -986,6 +1001,19 @@ var PixViewProps = ki.Props{
 			"Args": ki.PropSlice{
 				{"Degrees", ki.Props{}},
 			},
+		}},
+		{"sep-fold", ki.BlankProp{}},
+		{"NewFolder", ki.Props{
+			"icon": "folder-plus",
+			"desc": "Create new folder with given name",
+			"Args": ki.PropSlice{
+				{"Folder Name", ki.Props{}},
+			},
+		}},
+		{"EmptyTrash", ki.Props{
+			"icon":    "trash",
+			"desc":    "Empty the Trash folder -- <b>Permanently</b> deletes the trashed pics!",
+			"confirm": true,
 		}},
 		{"sep-info", ki.BlankProp{}},
 		{"InfoCur", ki.Props{

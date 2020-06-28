@@ -1,6 +1,12 @@
 # GoPix
 
-Go picture management app, because Mac Photos bricked my entire photo library upon updating to Catalina.
+![alt tag](logo/gopix_icon.png)
+
+Go picture management app, because Mac Photos bricked my entire photo library upon updating to Catalina...
+
+# Install
+
+See `install` dir for makefiles that install per different OS standards.
 
 # Goals
 
@@ -19,11 +25,12 @@ Go picture management app, because Mac Photos bricked my entire photo library up
 
 # TODO
 
+* rotate left not working!  maybe just on helif?
+
 * add refresh from exif button
 
 * select-all
 
-* new folder toolbar action
 
 
 
