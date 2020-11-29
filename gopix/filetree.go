@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/goki/gi/gi"
+	"github.com/goki/gi/gist"
 	"github.com/goki/gi/giv"
 	"github.com/goki/gi/oswin/dnd"
 	"github.com/goki/gi/oswin/mimedata"
@@ -98,16 +99,16 @@ var FileTreeViewProps = ki.Props{
 	"border-radius":    units.NewPx(0),
 	"padding":          units.NewPx(0),
 	"margin":           units.NewPx(1),
-	"text-align":       gi.AlignLeft,
-	"vertical-align":   gi.AlignTop,
+	"text-align":       gist.AlignLeft,
+	"vertical-align":   gist.AlignTop,
 	"color":            &gi.Prefs.Colors.Font,
 	"background-color": "inherit",
 	"no-templates":     true,
 	".exec": ki.Props{
-		"font-weight": gi.WeightBold,
+		"font-weight": gist.WeightBold,
 	},
 	".open": ki.Props{
-		"font-style": gi.FontItalic,
+		"font-style": gist.FontItalic,
 	},
 	".untracked": ki.Props{
 		"color": "#808080",
