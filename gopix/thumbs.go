@@ -18,6 +18,7 @@ import (
 
 	"github.com/anthonynsimon/bild/clone"
 	"github.com/goki/gi/gi"
+	"github.com/goki/gi/girl"
 	"github.com/goki/gopix/picinfo"
 	"github.com/goki/ki/dirs"
 	"github.com/goki/mat32"
@@ -215,8 +216,8 @@ func (pv *PixView) ThumbGen(pi *picinfo.Info) error {
 	if !ok {
 		rgb = clone.AsRGBA(img)
 	}
-	tr := &gi.TextRender{}
-	rs := &gi.RenderState{}
+	tr := &girl.Text{}
+	rs := &girl.State{}
 	rs.Init(isz.X, isz.Y, rgb)
 	rs.Bounds.Max = isz
 	ds := pi.DateTaken.Format("2006:01:02")

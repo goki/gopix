@@ -11,6 +11,7 @@ import (
 
 	"github.com/chewxy/math32"
 	"github.com/goki/gi/gi"
+	"github.com/goki/gi/gist"
 	"github.com/goki/gi/oswin"
 	"github.com/goki/gi/oswin/dnd"
 	"github.com/goki/gi/oswin/key"
@@ -107,7 +108,7 @@ func (ig *ImgGrid) Config(reset bool) {
 	if reset {
 		sb.Value = 0
 	}
-	sb.SetFixedWidth(units.NewPx(gi.ScrollBarWidthDefault))
+	sb.SetFixedWidth(units.NewPx(gist.ScrollBarWidthDefault))
 	sb.SetStretchMaxHeight()
 	ig.SetScrollMax()
 	ig.Update()
