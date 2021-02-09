@@ -1176,7 +1176,7 @@ func (ig *ImgGrid) ItemCtxtMenu(idx int) {
 
 func (ig *ImgGrid) KeyInputActive(kt *key.ChordEvent) {
 	if gi.KeyEventTrace {
-		fmt.Printf("ImgGrid KeyInput: %v\n", ig.PathUnique())
+		fmt.Printf("ImgGrid KeyInput: %v\n", ig.Path())
 	}
 	kf := gi.KeyFun(kt.Chord())
 	selMode := mouse.SelectModeBits(kt.Modifiers)

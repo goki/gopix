@@ -23,7 +23,7 @@ import (
 
 // ParentPixView returns the PixView parent of given node
 func ParentPixView(kn ki.Ki) (*PixView, bool) {
-	if kn.IsRoot() {
+	if ki.IsRoot(kn) {
 		return nil, false
 	}
 	var pv *PixView

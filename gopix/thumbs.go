@@ -133,7 +133,7 @@ func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 				} else {
 					if !pi.FileMod.Before(fst.ModTime()) {
 						if !pi.DateTaken.IsZero() {
-							pv.PProg.Step()
+							pv.PProg.ProgStep()
 							continue
 						}
 						fmt.Printf("redoing thumb to update date taken: %v\n", pi.File)
@@ -151,7 +151,7 @@ func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 		pi, err := picinfo.OpenNewInfo(ffn)
 		if pi == nil {
 			fmt.Printf("File: %s failed Info open: err: %v\n", fn, err)
-			pv.PProg.Step()
+			pv.PProg.ProgStep()
 			continue
 		}
 		num, has := pv.NumberFromFname(fnext)
@@ -169,7 +169,7 @@ func (pv *PixView) InfoUpdtThr(fdir string, imgs []string, st, ed int) {
 			pi.Thumb = ""
 			log.Println(err)
 		}
-		pv.PProg.Step()
+		pv.PProg.ProgStep()
 	}
 	pv.WaitGp.Done()
 }
@@ -308,7 +308,7 @@ func (pv *PixView) UniquifyBaseNames() {
 		} else {
 			bmap[fnext] = []string{fn}
 		}
-		pv.PProg.Step()
+		pv.PProg.ProgStep()
 	}
 
 	rmap := make(map[string]string) // rename map
@@ -381,14 +381,14 @@ func (pv *PixView) RenameByDate() {
 	pv.PProg.Start(len(pv.AllInfo))
 	for fn, pi := range pv.AllInfo {
 		if pi.DateTaken.IsZero() {
-			pv.PProg.Step()
+			pv.PProg.ProgStep()
 			continue
 		}
 		ds := pi.DateTaken.Format(DateFileFmt)
 		n := pi.Number
 		nfn := fmt.Sprintf("img_%s_n%d", ds, n)
 		if fn == nfn {
-			pv.PProg.Step()
+			pv.PProg.ProgStep()
 			continue
 		}
 		ofn := filepath.Base(pi.File)
@@ -409,7 +409,7 @@ func (pv *PixView) RenameByDate() {
 
 		delete(pv.AllInfo, fn)
 		pv.AllInfo[nfn] = pi
-		pv.PProg.Step()
+		pv.PProg.ProgStep()
 	}
 	fmt.Println("...Done\n")
 	// gi.PromptDialog(nil, gi.DlgOpts{Title: "Done", Prompt: "Done Renaming by Date"}, gi.AddOk, gi.NoCancel, nil, nil)
@@ -467,7 +467,7 @@ func (pv *PixView) CleanAllInfoThr(dryRun bool, imgs []string, st, ed int) {
 		img := imgs[i]
 		typ := filecat.SupportedFromFile(img)
 		if typ.Cat() != filecat.Image { // todo: movies!
-			pv.PProg.Step()
+			pv.PProg.ProgStep()
 			continue
 		}
 		fn := filepath.Base(img)
@@ -486,7 +486,7 @@ func (pv *PixView) CleanAllInfoThr(dryRun bool, imgs []string, st, ed int) {
 				pv.TrashFiles(picinfo.Pics{pi})
 				os.Remove(pi.Thumb)
 			}
-			pv.PProg.Step()
+			pv.PProg.ProgStep()
 			continue
 		}
 		num, has := pv.NumberFromFname(fnext)
@@ -568,7 +568,7 @@ func (pv *PixView) CleanDupesThr(dryRun bool, smax int64, szs []int64, smap map[
 		sz := szs[si]
 		pis := smap[sz]
 		if len(pis) <= 1 {
-			pv.PProg.Step()
+			pv.PProg.ProgStep()
 			continue
 		}
 		npi := len(pis)
@@ -621,7 +621,7 @@ func (pv *PixView) CleanDupesThr(dryRun bool, smax int64, szs []int64, smap map[
 				break
 			}
 		}
-		pv.PProg.Step()
+		pv.PProg.ProgStep()
 	}
 	pv.WaitGp.Done()
 }

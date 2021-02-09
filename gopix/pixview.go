@@ -18,14 +18,12 @@ import (
 	"github.com/goki/gi/giv"
 	"github.com/goki/gi/oswin"
 	"github.com/goki/gi/oswin/mouse"
-	"github.com/goki/gi/units"
 	"github.com/goki/gopix/imgrid"
 	"github.com/goki/gopix/picinfo"
 	"github.com/goki/ki/dirs"
 	"github.com/goki/ki/ki"
 	"github.com/goki/ki/kit"
 	"github.com/goki/ki/sliceclone"
-	"github.com/goki/mat32"
 	"github.com/goki/pi/filecat"
 )
 
@@ -45,7 +43,7 @@ type PixView struct {
 	AllMu       sync.Mutex            `desc:"mutex protecting AllInfo"`
 	Thumbs      []string              `view:"-" desc:"desc list of all thumb files in current folder -- sent to ImgGrid -- must be in 1-to-1 order with Info"`
 	WaitGp      sync.WaitGroup        `view:"-" desc:"wait group for synchronizing threaded layer calls"`
-	PProg       PProg                 `view:"-" desc:"parallel progress monitor"`
+	PProg       *gi.ProgressBar       `view:"-" desc:"parallel progress monitor"`
 }
 
 var KiT_PixView = kit.Types.AddType(&PixView{}, PixViewProps)
@@ -116,17 +114,7 @@ func (pv *PixView) Config(imgdir string) {
 	tbar := gi.AddNewLayout(pv, "topbar", gi.LayoutHoriz)
 	tbar.SetStretchMaxWidth()
 	gi.AddNewToolBar(tbar, "toolbar")
-	prog := gi.AddNewScrollBar(tbar, "progress")
-	prog.Dim = mat32.X
-	prog.Defaults()
-	prog.SetMinPrefWidth(units.NewEm(20))
-	prog.SetMinPrefHeight(units.NewEm(1))
-	prog.Min = 0
-	prog.Max = 1
-	prog.ThumbVal = 1
-	prog.Value = 0
-	prog.SetInactive()
-	pv.PProg.Bar = prog
+	pv.PProg = gi.AddNewProgressBar(tbar, "progress")
 	split := gi.AddNewSplitView(pv, "splitview")
 
 	ftfr := gi.AddNewFrame(split, "filetree", gi.LayoutVert)
@@ -786,7 +774,7 @@ func (pv *PixView) RotateSel(deg float32) {
 	pv.PProg.Start(len(pis))
 	for _, pi := range pis {
 		pv.RotateImage(pi, deg)
-		pv.PProg.Step()
+		pv.PProg.ProgStep()
 	}
 	pv.FolderFiles = nil
 	pv.DirInfo(false) // update -- also saves updated info
@@ -840,7 +828,7 @@ func (pv *PixView) SetDateTakenSel(date time.Time, dayInc int, minInc int) {
 	for _, pi := range pis {
 		pv.SetDateTaken(pi, cdt)
 		cdt = cdt.Add(incSec)
-		pv.PProg.Step()
+		pv.PProg.ProgStep()
 	}
 	pv.FolderFiles = nil
 	pv.DirInfo(false) // update -- also saves updated info
