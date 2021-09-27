@@ -197,6 +197,9 @@ func (ig *ImgGrid) LayoutGrid(iter int) bool {
 	gr := ig.Grid()
 
 	alc := ig.LayState.Alloc.Size.ToPoint()
+	if alc.X == 0 || alc.Y == 0 {
+		return false
+	}
 	alc.X -= int(sb.Sty.Layout.Width.Dots)
 	gsz := alc.Div(int(ig.ImageMax))
 	gsz.X = ints.MaxInt(2, gsz.X)

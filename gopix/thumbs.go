@@ -372,6 +372,9 @@ func (pv *PixView) UniqueNameNumber(dt time.Time, num int) (string, int) {
 // RenameByDate renames image files by their date taken.
 // Operates on AllInfo so must be done after that is loaded.
 func (pv *PixView) RenameByDate() {
+	pv.UpdtMu.Lock()
+	defer pv.UpdtMu.Unlock()
+
 	pv.UpdateFolders()
 	pv.GetFolderFiles() // greatly speeds up rename
 
@@ -508,6 +511,9 @@ func (pv *PixView) CleanAllInfoThr(dryRun bool, imgs []string, st, ed int) {
 
 // CleanDupes checks for duplicate files based on file sizes
 func (pv *PixView) CleanDupes(dryRun bool) {
+	pv.UpdtMu.Lock()
+	defer pv.UpdtMu.Unlock()
+
 	// adir := filepath.Join(pv.ImageDir, "All")
 	pv.UpdateFolders()
 

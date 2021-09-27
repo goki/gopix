@@ -40,7 +40,8 @@ type PixView struct {
 	Files       giv.FileTree          `desc:"all the files in the project directory and subdirectories"`
 	Info        picinfo.Pics          `desc:"info for all the pictures in current folder"`
 	AllInfo     picinfo.PicMap        `desc:"map of info for all files"`
-	AllMu       sync.Mutex            `desc:"mutex protecting AllInfo"`
+	AllMu       sync.Mutex            `desc:"mutex protecting AllInfo local access within processing steps"`
+	UpdtMu      sync.Mutex            `desc:"mutex for any big task involving updating AllInfo"`
 	Thumbs      []string              `view:"-" desc:"desc list of all thumb files in current folder -- sent to ImgGrid -- must be in 1-to-1 order with Info"`
 	WaitGp      sync.WaitGroup        `view:"-" desc:"wait group for synchronizing threaded layer calls"`
 	PProg       *gi.ProgressBar       `view:"-" desc:"parallel progress monitor"`
@@ -248,7 +249,9 @@ func (pv *PixView) FileNodeSelected(fn *giv.FileNode, tvn *FileTreeView) {
 	if fn.IsDir() {
 		pv.Folder = fn.Nm
 		pv.Tabs().SelectTabByName("Images")
+		pv.UpdtMu.Lock()
 		pv.DirInfo(true) // reset
+		pv.UpdtMu.Unlock()
 	}
 }
 
@@ -563,6 +566,9 @@ func (pv *PixView) ViewRefresh() {
 
 // Duplicate duplicates image
 func (pv *PixView) Duplicate(pi *picinfo.Info) error {
+	pv.UpdtMu.Lock()
+	defer pv.UpdtMu.Unlock()
+
 	nfn, n := pv.UniqueNameNumber(pi.DateTaken, pi.Number)
 	npi := &picinfo.Info{}
 	*npi = *pi
@@ -668,6 +674,9 @@ func (pv *PixView) NewFolder(fname string) {
 
 // EmptyTrash deletes all files in the trash
 func (pv *PixView) EmptyTrash() {
+	pv.UpdtMu.Lock()
+	defer pv.UpdtMu.Unlock()
+
 	pv.Folder = "Trash"
 	pv.DirInfo(true)
 	pv.DeleteInFolder(pv.Folder, pv.Info)
@@ -701,6 +710,9 @@ func (pv *PixView) MapFile(pi *picinfo.Info) {
 // SaveExifSel saves updated Exif information for currently selected files.
 // This will change file type if it is not already a Jpeg as that is only supported type.
 func (pv *PixView) SaveExifSel() {
+	pv.UpdtMu.Lock()
+	defer pv.UpdtMu.Unlock()
+
 	pis := pv.CheckSel()
 	n := len(pis)
 	if n == 0 {
@@ -766,6 +778,9 @@ func (pv *PixView) RotateRightSel() {
 // setting, otherwise it is manually rotated and saved, except if it is an Heic file
 // which must be converted to jpeg at this point..
 func (pv *PixView) RotateSel(deg float32) {
+	pv.UpdtMu.Lock()
+	defer pv.UpdtMu.Unlock()
+
 	pis := pv.CheckSel()
 	n := len(pis)
 	if n == 0 {
@@ -817,6 +832,9 @@ func (pv *PixView) RotateImage(pi *picinfo.Info, deg float32) error {
 
 // SetDateTakenSel sets the DateTaken for selected items, with given day and minute increments between each
 func (pv *PixView) SetDateTakenSel(date time.Time, dayInc int, minInc int) {
+	pv.UpdtMu.Lock()
+	defer pv.UpdtMu.Unlock()
+
 	pis := pv.CheckSel()
 	n := len(pis)
 	if n == 0 {
@@ -836,6 +854,9 @@ func (pv *PixView) SetDateTakenSel(date time.Time, dayInc int, minInc int) {
 
 // SetDateTakenCur sets the DateTaken for single currently-selected file
 func (pv *PixView) SetDateTakenCur(date time.Time) error {
+	pv.UpdtMu.Lock()
+	defer pv.UpdtMu.Unlock()
+
 	pi := pv.CheckCur()
 	if pi == nil {
 		return nil
@@ -854,6 +875,9 @@ func (pv *PixView) SetDateTaken(pi *picinfo.Info, date time.Time) error {
 
 // ImgGridMoveDates moves image dates based on an insert event from ImgGrid
 func (pv *PixView) ImgGridMoveDates(idx int) {
+	pv.UpdtMu.Lock()
+	defer pv.UpdtMu.Unlock()
+
 	ig := pv.ImgGrid()
 	ni := len(ig.Images) - len(pv.Thumbs)
 	nf := ig.Images[idx : idx+ni]
@@ -942,9 +966,11 @@ func GoPixViewWindow(path string) (*PixView, *gi.Window) {
 	// })
 
 	vp.UpdateEndNoSig(updt)
+	pv.UpdtMu.Lock()
 	win.GoStartEventLoop() // in a separate goroutine
 	pv.UniquifyBaseNames()
 	pv.OpenAllInfo()
+	pv.UpdtMu.Unlock()
 	return pv, win
 }
 
