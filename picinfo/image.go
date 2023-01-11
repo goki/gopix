@@ -14,9 +14,9 @@ import (
 	"log"
 	"os"
 
+	"github.com/adrium/goheif"
 	"github.com/anthonynsimon/bild/transform"
 	"github.com/goki/pi/filecat"
-	"github.com/jdeng/goheif"
 	"github.com/spakin/netpbm"
 	"golang.org/x/image/bmp"
 	"golang.org/x/image/tiff"

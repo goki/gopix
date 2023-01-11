@@ -9,7 +9,6 @@ import (
 	"image"
 	"sort"
 
-	"github.com/chewxy/math32"
 	"github.com/goki/gi/gi"
 	"github.com/goki/gi/gist"
 	"github.com/goki/gi/oswin"
@@ -121,7 +120,7 @@ func (ig *ImgGrid) SetScrollMax() int {
 	nr = ints.MaxInt(nr, ig.Size.Y)
 	sb.Max = float32(nr)
 	sb.ThumbVal = float32(ig.Size.Y)
-	sb.Value = math32.Min(sb.Max-1, sb.Value)
+	sb.Value = mat32.Min(sb.Max-1, sb.Value)
 	return nr
 }
 

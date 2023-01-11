@@ -16,9 +16,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/dsoprea/go-exif/v2"
-	exifcommon "github.com/dsoprea/go-exif/v2/common"
-	jpegstructure "github.com/dsoprea/go-jpeg-image-structure"
+	"github.com/dsoprea/go-exif/v3"
+	exifcommon "github.com/dsoprea/go-exif/v3/common"
+	jpegstructure "github.com/dsoprea/go-jpeg-image-structure/v2"
 	"github.com/goki/pi/filecat"
 )
 
@@ -122,47 +122,50 @@ func (pi *Info) ParseRawExif(rawExif []byte) {
 	}
 	fnbase := filepath.Base(pi.File)
 
-	im := exif.NewIfdMappingWithStandard()
-	ti := exif.NewTagIndex()
+	entries, _, err := exif.GetFlatExifDataUniversalSearch(rawExif, nil, false)
+	/*
+		im := exif.NewIfdMappingWithStandard()
+		ti := exif.NewTagIndex()
 
-	entries := make([]IfdEntry, 0)
-	visitor := func(fqIfdPath string, ifdIndex int, ite *exif.IfdTagEntry) (err error) {
-		tagId := ite.TagId()
-		tagType := ite.TagType()
-		ifdPath, err := im.StripPathPhraseIndices(fqIfdPath)
-		if err != nil {
-			log.Println(err)
-			return err
-		}
+		entries := make([]IfdEntry, 0)
+		visitor := func(fqIfdPath string, ifdIndex int, ite *exif.IfdTagEntry) (err error) {
+			tagId := ite.TagId()
+			tagType := ite.TagType()
+			ifdPath, err := im.StripPathPhraseIndices(fqIfdPath)
+			if err != nil {
+				log.Println(err)
+				return err
+			}
 
-		it, err := ti.Get(ifdPath, tagId)
-		if err != nil {
-			// fmt.Printf("WARNING: %v: [%s] (%04x)\n", err, ifdPath, tagId)
+			it, err := ti.Get(ifdPath, tagId)
+			if err != nil {
+				// fmt.Printf("WARNING: %v: [%s] (%04x)\n", err, ifdPath, tagId)
+				return nil
+			}
+			value, err := ite.Value()
+			if err != nil {
+				// fmt.Printf("WARNING: %v: [%s] (%04x)\n", err, ifdPath, tagId)
+				return nil
+
+			}
+			valueString, err := ite.FormatFirst()
+			entry := IfdEntry{
+				IfdPath:     ifdPath,
+				FqIfdPath:   fqIfdPath,
+				IfdIndex:    ifdIndex,
+				TagId:       tagId,
+				TagName:     it.Name,
+				TagTypeId:   tagType,
+				TagTypeName: tagType.String(),
+				UnitCount:   ite.UnitCount(),
+				Value:       value,
+				ValueString: valueString,
+			}
+			entries = append(entries, entry)
 			return nil
 		}
-		value, err := ite.Value()
-		if err != nil {
-			// fmt.Printf("WARNING: %v: [%s] (%04x)\n", err, ifdPath, tagId)
-			return nil
-
-		}
-		valueString, err := ite.FormatFirst()
-		entry := IfdEntry{
-			IfdPath:     ifdPath,
-			FqIfdPath:   fqIfdPath,
-			IfdIndex:    ifdIndex,
-			TagId:       tagId,
-			TagName:     it.Name,
-			TagTypeId:   tagType,
-			TagTypeName: tagType.String(),
-			UnitCount:   ite.UnitCount(),
-			Value:       value,
-			ValueString: valueString,
-		}
-		entries = append(entries, entry)
-		return nil
-	}
-	_, _, err := exif.Visit(exifcommon.IfdStandard, im, ti, rawExif, visitor)
+		_, _, err := exif.Visit(exifcommon.IfdStandard, im, ti, rawExif, visitor)
+	*/
 	lat := [4]float64{}
 	long := [4]float64{}
 	var gpstime []float64
@@ -171,89 +174,90 @@ func (pi *Info) ParseRawExif(rawExif []byte) {
 	var dtd time.Time
 	var dtp time.Time
 	for _, e := range entries {
-		// fmt.Printf("Tag: %s  Value: %s\n", e.TagName, e.ValueString)
+		valString := e.FormattedFirst
+		// fmt.Printf("Tag: %s  Value: %s\n", e.TagName, valString)
 		switch e.TagName {
 		case "DateTimeOriginal":
-			dto, err = ExifDateParser(e.ValueString)
+			dto, err = ExifDateParser(valString)
 			if err != nil {
 				log.Printf("File: %s err: %v\n", fnbase, err)
 				dto = time.Time{}
 			}
 		case "DateTimeDigitized":
-			dtd, err = ExifDateParser(e.ValueString)
+			dtd, err = ExifDateParser(valString)
 			if err != nil {
 				log.Printf("File: %s err: %v\n", fnbase, err)
 				dtd = time.Time{}
 			}
 		case "DateTime":
-			dtp, err = ExifDateParser(e.ValueString)
+			dtp, err = ExifDateParser(valString)
 			if err != nil {
 				log.Printf("File: %s err: %v\n", fnbase, err)
 				dtp = time.Time{}
 			}
 		case "ImageNumber":
-			pi.Number = e.ToInt()
+			pi.Number = EntryToInt(&e)
 		case "PixelYDimension":
-			pi.Size.Y = e.ToInt()
+			pi.Size.Y = EntryToInt(&e)
 		case "PixelXDimension":
-			pi.Size.X = e.ToInt()
+			pi.Size.X = EntryToInt(&e)
 		case "BitsPerSample":
-			pi.Depth = e.ToInt()
+			pi.Depth = EntryToInt(&e)
 		case "Orientation":
-			pi.Orient = Orientations(e.ToInt())
+			pi.Orient = Orientations(EntryToInt(&e))
 		case "ImageDescription":
-			pi.Desc = e.ValueString
+			pi.Desc = valString
 		case "ExposureTime":
-			pi.Exposure.Time = e.ToFloat()
+			pi.Exposure.Time = EntryToFloat(&e)
 		case "ISOSpeedRatings":
-			pi.Exposure.ISOSpeed = e.ToFloat()
+			pi.Exposure.ISOSpeed = EntryToFloat(&e)
 		case "ApertureValue":
-			pi.Exposure.Aperture = e.ToFloat()
+			pi.Exposure.Aperture = EntryToFloat(&e)
 		case "FocalLength":
-			pi.Exposure.FocalLen = e.ToFloat()
+			pi.Exposure.FocalLen = EntryToFloat(&e)
 		case "FNumber":
-			pi.Exposure.FStop = e.ToFloat()
+			pi.Exposure.FStop = EntryToFloat(&e)
 		case "GPSLatitudeRef":
-			if e.ValueString == "N" {
+			if valString == "N" {
 				lat[3] = 1
 			} else {
 				lat[3] = -1
 			}
 		case "GPSLatitude":
-			rf := e.ToFloats()
+			rf := EntryToFloats(&e)
 			for i := range rf {
 				lat[i] = rf[i]
 			}
 		case "GPSLongitudeRef":
-			if e.ValueString == "E" {
+			if valString == "E" {
 				long[3] = 1
 			} else {
 				long[3] = -1
 			}
 		case "GPSLongitude":
-			rf := e.ToFloats()
+			rf := EntryToFloats(&e)
 			for i := range rf {
 				long[i] = rf[i]
 			}
 		case "GPSAltitude":
-			pi.GPSLoc.Alt = e.ToFloat()
+			pi.GPSLoc.Alt = EntryToFloat(&e)
 		case "GPSAltitudeRef":
 		case "GPSBearing":
-			pi.GPSMisc.DestBearing = e.ToFloat()
+			pi.GPSMisc.DestBearing = EntryToFloat(&e)
 		case "GPSDestBearing":
-			pi.GPSMisc.DestBearing = e.ToFloat()
+			pi.GPSMisc.DestBearing = EntryToFloat(&e)
 		case "GPSDestBearingRef":
-			pi.GPSMisc.DestBearingRef = e.ValueString
+			pi.GPSMisc.DestBearingRef = valString
 		case "GPSImgDirection":
-			pi.GPSMisc.ImgDir = e.ToFloat()
+			pi.GPSMisc.ImgDir = EntryToFloat(&e)
 		case "GPSImgDirectionRef":
-			pi.GPSMisc.ImgDirRef = e.ValueString
+			pi.GPSMisc.ImgDirRef = valString
 		case "GPSSpeed":
-			pi.GPSMisc.Speed = e.ToFloat()
+			pi.GPSMisc.Speed = EntryToFloat(&e)
 		case "GPSSpeedRef":
-			pi.GPSMisc.SpeedRef = e.ValueString
+			pi.GPSMisc.SpeedRef = valString
 		case "GPSDateStamp":
-			ds := e.ValueString
+			ds := valString
 			if len(ds) > 10 {
 				ds = ds[:10]
 			}
@@ -264,7 +268,7 @@ func (pi *Info) ParseRawExif(rawExif []byte) {
 				pi.GPSDate = gpd
 			}
 		case "GPSTimeStamp":
-			gpstime = e.ToFloats()
+			gpstime = EntryToFloats(&e)
 		case "ComponentsConfiguration":
 		case "UserComment": // usu not useful and long.
 		case "MakerNote":
@@ -273,7 +277,7 @@ func (pi *Info) ParseRawExif(rawExif []byte) {
 		case "ExifTag":
 		case "ExifVersion":
 		default:
-			pi.Tags[e.TagName] = e.ValueString
+			pi.Tags[e.TagName] = valString
 		}
 	}
 	if !dto.IsZero() {
@@ -313,96 +317,99 @@ func (pi *Info) ParseRawExif(rawExif []byte) {
 // otherwise it is generated from the rawExif, which also can be nil if starting fresh.
 // returns true if data was different and requires saving.
 func (pi *Info) UpdateExif(rawExif []byte, rootIfd *exif.Ifd) (ib *exif.IfdBuilder, updt bool, err error) {
-	defer func() {
-		if state := recover(); state != nil {
-			err = state.(error)
-		}
-	}()
-	ci, err := NewInfoForFile(pi.File)
-	ci.ParseRawExif(rawExif)
+	return
+	/*
+		defer func() {
+			if state := recover(); state != nil {
+				err = state.(error)
+			}
+		}()
+		ci, err := NewInfoForFile(pi.File)
+		ci.ParseRawExif(rawExif)
 
-	if rootIfd == nil && rawExif != nil {
-		im := exif.NewIfdMappingWithStandard()
-		ti := exif.NewTagIndex()
-		_, index, err := exif.Collect(im, ti, rawExif)
-		if err != nil {
-			return nil, false, err
+		if rootIfd == nil && rawExif != nil {
+			im := exif.NewIfdMappingWithStandard()
+			ti := exif.NewTagIndex()
+			_, index, err := exif.Collect(im, ti, rawExif)
+			if err != nil {
+				return nil, false, err
+			}
+			rootIfd = index.RootIfd
 		}
-		rootIfd = index.RootIfd
-	}
 
-	if rootIfd != nil {
-		ib = exif.NewIfdBuilderFromExistingChain(rootIfd)
-	} else {
-		im := exif.NewIfdMappingWithStandard()
-		ti := exif.NewTagIndex()
-		ib = exif.NewIfdBuilder(im, ti, exifcommon.IfdPathStandard, binary.BigEndian)
-	}
+		if rootIfd != nil {
+			ib = exif.NewIfdBuilderFromExistingChain(rootIfd)
+		} else {
+			im := exif.NewIfdMappingWithStandard()
+			ti := exif.NewTagIndex()
+			ib = exif.NewIfdBuilder(im, ti, exifcommon.IfdPathStandard, binary.BigEndian)
+		}
 
-	ifchld, err := exif.GetOrCreateIbFromRootIb(ib, "IFD")
-	if err != nil {
-		log.Printf("create path %s err: %s\n", "IFD", err)
-	}
-	exchld, err := exif.GetOrCreateIbFromRootIb(ib, "IFD/Exif")
-	if err != nil {
-		log.Printf("create path %s err: %s\n", "IFD/Exif", err)
-	}
+		ifchld, err := exif.GetOrCreateIbFromRootIb(ib, "IFD")
+		if err != nil {
+			log.Printf("create path %s err: %s\n", "IFD", err)
+		}
+		exchld, err := exif.GetOrCreateIbFromRootIb(ib, "IFD/Exif")
+		if err != nil {
+			log.Printf("create path %s err: %s\n", "IFD/Exif", err)
+		}
 
-	if !ci.DateTaken.Equal(pi.DateTaken) {
-		err = ifchld.SetStandardWithName("DateTimeOriginal", exif.ExifFullTimestampString(pi.DateTaken))
-		if err != nil {
-			log.Printf("date set err: %s\n", err)
+		if !ci.DateTaken.Equal(pi.DateTaken) {
+			err = ifchld.SetStandardWithName("DateTimeOriginal", exif.ExifFullTimestampString(pi.DateTaken))
+			if err != nil {
+				log.Printf("date set err: %s\n", err)
+			}
+			updt = true
 		}
-		updt = true
-	}
-	if ci.Number != pi.Number {
-		err = ifchld.SetStandardWithName("ImageNumber", intToLong(pi.Number))
-		if err != nil {
-			log.Printf("number set err: %s\n", err)
+		if ci.Number != pi.Number {
+			err = ifchld.SetStandardWithName("ImageNumber", intToLong(pi.Number))
+			if err != nil {
+				log.Printf("number set err: %s\n", err)
+			}
+			updt = true
 		}
-		updt = true
-	}
-	if ci.Size.Y != pi.Size.Y {
-		err = exchld.SetStandardWithName("PixelYDimension", intToLong(pi.Size.Y))
-		if err != nil {
-			log.Printf("pix set err: %s\n", err)
+		if ci.Size.Y != pi.Size.Y {
+			err = exchld.SetStandardWithName("PixelYDimension", intToLong(pi.Size.Y))
+			if err != nil {
+				log.Printf("pix set err: %s\n", err)
+			}
+			updt = true
 		}
-		updt = true
-	}
-	if ci.Size.X != pi.Size.X {
-		err = exchld.SetStandardWithName("PixelXDimension", intToLong(pi.Size.X))
-		if err != nil {
-			log.Printf("pix set err: %s\n", err)
+		if ci.Size.X != pi.Size.X {
+			err = exchld.SetStandardWithName("PixelXDimension", intToLong(pi.Size.X))
+			if err != nil {
+				log.Printf("pix set err: %s\n", err)
+			}
+			updt = true
 		}
-		updt = true
-	}
-	if ci.Orient != pi.Orient {
-		err = ifchld.SetStandardWithName("Orientation", intToShort(int(pi.Orient)))
-		if err != nil {
-			log.Printf("orient set err: %s\n", err)
+		if ci.Orient != pi.Orient {
+			err = ifchld.SetStandardWithName("Orientation", intToShort(int(pi.Orient)))
+			if err != nil {
+				log.Printf("orient set err: %s\n", err)
+			}
+			updt = true
 		}
-		updt = true
-	}
-	if ci.Desc != pi.Desc {
-		err = ifchld.SetStandardWithName("ImageDescription", pi.Desc)
-		if err != nil {
-			log.Printf("desc set err: %s\n", err)
+		if ci.Desc != pi.Desc {
+			err = ifchld.SetStandardWithName("ImageDescription", pi.Desc)
+			if err != nil {
+				log.Printf("desc set err: %s\n", err)
+			}
+			updt = true
 		}
-		updt = true
-	}
-	// if ci.GPSLoc.Lat != pi.GPSLoc.Lat {
-	// 	childIb.SetStandardWithName("Orientation", uint16(pi.Orient))
-	// 	updt = true
-	// }
-	//
-	if updt {
-		pi.DateMod = time.Now()
-		err = ifchld.SetStandardWithName("DateTime", exif.ExifFullTimestampString(pi.DateMod))
-		if err != nil {
-			log.Printf("datetime set err: %s\n", err)
+		// if ci.GPSLoc.Lat != pi.GPSLoc.Lat {
+		// 	childIb.SetStandardWithName("Orientation", uint16(pi.Orient))
+		// 	updt = true
+		// }
+		//
+		if updt {
+			pi.DateMod = time.Now()
+			err = ifchld.SetStandardWithName("DateTime", exif.ExifFullTimestampString(pi.DateMod))
+			if err != nil {
+				log.Printf("datetime set err: %s\n", err)
+			}
 		}
-	}
-	return ib, updt, err
+		return ib, updt, err
+	*/
 }
 
 // UpdateFileMod updates the modification time on the file
@@ -511,7 +518,10 @@ func (pi *Info) SaveJpegNew(img image.Image) error {
 // AddExifPrefix adds the standard Exif00 prefix to given encoded exif data
 // if not already present
 func AddExifPrefix(exifData []byte) []byte {
-	pfx := jpegstructure.ExifPrefix
+	// exifPrefix is the prefix found at the top of an EXIF slice. This is JPEG-
+	// specific.
+	pfx := []byte{'E', 'x', 'i', 'f', 0, 0}
+	// pfx := jpegstructure.ExifPrefix
 	pl := len(pfx)
 	if len(exifData) >= pl && bytes.Equal(exifData[:pl], pfx) {
 		return exifData
@@ -657,7 +667,7 @@ type IfdEntry struct {
 	ValueString string                      `json:"value_string"`
 }
 
-func (e *IfdEntry) ToInt() int {
+func EntryToInt(e *exif.ExifTag) int {
 	switch e.TagTypeId {
 	case exifcommon.TypeLong:
 		vl := e.Value.([]uint32)
@@ -686,7 +696,7 @@ func (e *IfdEntry) ToInt() int {
 	return 0
 }
 
-func (e *IfdEntry) ToFloat() float64 {
+func EntryToFloat(e *exif.ExifTag) float64 {
 	switch e.TagTypeId {
 	case exifcommon.TypeLong:
 		vl := e.Value.([]uint32)
@@ -715,7 +725,7 @@ func (e *IfdEntry) ToFloat() float64 {
 	return 0
 }
 
-func (e *IfdEntry) ToFloats() []float64 {
+func EntryToFloats(e *exif.ExifTag) []float64 {
 	rf := make([]float64, e.UnitCount)
 	switch e.TagTypeId {
 	case exifcommon.TypeLong:
