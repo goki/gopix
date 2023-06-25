@@ -77,7 +77,7 @@ func (ig *ImgGrid) Config(reset bool) {
 		gi.AddNewLayout(ig, "grid", gi.LayoutGrid)
 		sbb := gi.AddNewScrollBar(ig, "sb")
 		sbb.Defaults()
-		sbb.SliderSig.Connect(ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		sbb.SliderSig.Connect(ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 			igg := recv.(*ImgGrid)
 			if sig == int64(gi.SliderValueChanged) {
 				igg.Update()
@@ -318,7 +318,7 @@ func (ig *ImgGrid) ImgGridEvents() {
 	gr := ig.Grid()
 
 	// LowPri to allow other focal widgets to capture
-	ig.ConnectEvent(oswin.MouseScrollEvent, gi.LowPri, func(recv, send ki.Ki, sig int64, d interface{}) {
+	ig.ConnectEvent(oswin.MouseScrollEvent, gi.LowPri, func(recv, send ki.Ki, sig int64, d any) {
 		me := d.(*mouse.ScrollEvent)
 		igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 		me.SetProcessed()
@@ -326,7 +326,7 @@ func (ig *ImgGrid) ImgGridEvents() {
 		cur := float32(sbb.Pos)
 		sbb.SliderMove(cur, cur+float32(me.NonZeroDelta(false))) // preferY
 	})
-	ig.ConnectEvent(oswin.MouseEvent, gi.LowRawPri, func(recv, send ki.Ki, sig int64, d interface{}) {
+	ig.ConnectEvent(oswin.MouseEvent, gi.LowRawPri, func(recv, send ki.Ki, sig int64, d any) {
 		me := d.(*mouse.Event)
 		igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 		switch {
@@ -349,12 +349,12 @@ func (ig *ImgGrid) ImgGridEvents() {
 			me.SetProcessed()
 		}
 	})
-	ig.ConnectEvent(oswin.KeyChordEvent, gi.HiPri, func(recv, send ki.Ki, sig int64, d interface{}) {
+	ig.ConnectEvent(oswin.KeyChordEvent, gi.HiPri, func(recv, send ki.Ki, sig int64, d any) {
 		igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 		kt := d.(*key.ChordEvent)
 		igg.KeyInputActive(kt)
 	})
-	ig.ConnectEvent(oswin.DNDEvent, gi.RegPri, func(recv, send ki.Ki, sig int64, d interface{}) {
+	ig.ConnectEvent(oswin.DNDEvent, gi.RegPri, func(recv, send ki.Ki, sig int64, d any) {
 		de := d.(*dnd.Event)
 		igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 		switch de.Action {
@@ -366,7 +366,7 @@ func (ig *ImgGrid) ImgGridEvents() {
 			// 	igg.DragNDropSource(de)
 		}
 	})
-	gr.ConnectEvent(oswin.DNDFocusEvent, gi.RegPri, func(recv, send ki.Ki, sig int64, d interface{}) {
+	gr.ConnectEvent(oswin.DNDFocusEvent, gi.RegPri, func(recv, send ki.Ki, sig int64, d any) {
 		de := d.(*dnd.FocusEvent)
 		sgg := recv.Embed(gi.KiT_Layout).(*gi.Layout)
 		switch de.Action {
@@ -911,23 +911,23 @@ func (ig *ImgGrid) PasteIdx(idx int) {
 }
 
 // MakePasteMenu makes the menu of options for paste events
-func (ig *ImgGrid) MakePasteMenu(m *gi.Menu, data interface{}, idx int) {
+func (ig *ImgGrid) MakePasteMenu(m *gi.Menu, data any, idx int) {
 	if len(*m) > 0 {
 		return
 	}
-	m.AddAction(gi.ActOpts{Label: "Assign To", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+	m.AddAction(gi.ActOpts{Label: "Assign To", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 		svv := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 		svv.PasteAssign(data.(mimedata.Mimes), idx)
 	})
-	m.AddAction(gi.ActOpts{Label: "Insert Before", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+	m.AddAction(gi.ActOpts{Label: "Insert Before", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 		svv := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 		svv.PasteAtIdx(data.(mimedata.Mimes), idx)
 	})
-	m.AddAction(gi.ActOpts{Label: "Insert After", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+	m.AddAction(gi.ActOpts{Label: "Insert After", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 		svv := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 		svv.PasteAtIdx(data.(mimedata.Mimes), idx+1)
 	})
-	m.AddAction(gi.ActOpts{Label: "Cancel", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+	m.AddAction(gi.ActOpts{Label: "Cancel", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 	})
 }
 
@@ -1019,7 +1019,7 @@ func (ig *ImgGrid) DragNDropTarget(de *dnd.Event) {
 }
 
 // MakeDropMenu makes the menu of options for dropping on a target
-func (ig *ImgGrid) MakeDropMenu(m *gi.Menu, data interface{}, mod dnd.DropMods, idx int) {
+func (ig *ImgGrid) MakeDropMenu(m *gi.Menu, data any, mod dnd.DropMods, idx int) {
 	if len(*m) > 0 {
 		return
 	}
@@ -1030,20 +1030,20 @@ func (ig *ImgGrid) MakeDropMenu(m *gi.Menu, data interface{}, mod dnd.DropMods, 
 		m.AddLabel("Move:")
 	}
 	if mod == dnd.DropCopy {
-		m.AddAction(gi.ActOpts{Label: "Assign To", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		m.AddAction(gi.ActOpts{Label: "Assign To", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 			svv := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 			svv.DropAssign(data.(mimedata.Mimes), idx)
 		})
 	}
-	m.AddAction(gi.ActOpts{Label: "Insert Before", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+	m.AddAction(gi.ActOpts{Label: "Insert Before", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 		svv := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 		svv.DropBefore(data.(mimedata.Mimes), mod, idx) // captures mod
 	})
-	m.AddAction(gi.ActOpts{Label: "Insert After", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+	m.AddAction(gi.ActOpts{Label: "Insert After", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 		svv := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 		svv.DropAfter(data.(mimedata.Mimes), mod, idx) // captures mod
 	})
-	m.AddAction(gi.ActOpts{Label: "Cancel", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+	m.AddAction(gi.ActOpts{Label: "Cancel", Data: data}, ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 		svv := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 		svv.DropCancel()
 	})
@@ -1137,27 +1137,27 @@ func (ig *ImgGrid) DropCancel() {
 
 func (ig *ImgGrid) StdCtxtMenu(m *gi.Menu, idx int) {
 	m.AddAction(gi.ActOpts{Label: "Copy", Data: idx},
-		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 			igg.CopyIdxs(true)
 		})
 	m.AddAction(gi.ActOpts{Label: "Cut", Data: idx},
-		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 			igg.CutIdxs()
 		})
 	m.AddAction(gi.ActOpts{Label: "Paste", Data: idx},
-		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 			igg.PasteIdx(data.(int))
 		})
 	m.AddAction(gi.ActOpts{Label: "Duplicate", Data: idx},
-		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 			igg.Duplicate()
 		})
 	m.AddAction(gi.ActOpts{Label: "Delete", Data: idx},
-		ig.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		ig.This(), func(recv, send ki.Ki, sig int64, data any) {
 			igg := recv.Embed(KiT_ImgGrid).(*ImgGrid)
 			igg.CutIdxs()
 		})

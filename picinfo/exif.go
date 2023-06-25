@@ -663,7 +663,7 @@ type IfdEntry struct {
 	TagTypeId   exifcommon.TagTypePrimitive `json:"tag_type_id"`
 	TagTypeName string                      `json:"tag_type_name"`
 	UnitCount   uint32                      `json:"unit_count"`
-	Value       interface{}                 `json:"value"`
+	Value       any                         `json:"value"`
 	ValueString string                      `json:"value_string"`
 }
 

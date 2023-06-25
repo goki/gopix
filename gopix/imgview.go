@@ -85,7 +85,7 @@ func (iv *ImgView) ConnectEvents2D() {
 
 func (iv *ImgView) ImgViewEvents() {
 	iv.ImgViewMouseEvents()
-	iv.ConnectEvent(oswin.KeyChordEvent, gi.HiPri, func(recv, send ki.Ki, sig int64, d interface{}) {
+	iv.ConnectEvent(oswin.KeyChordEvent, gi.HiPri, func(recv, send ki.Ki, sig int64, d any) {
 		ivv := recv.Embed(KiT_ImgView).(*ImgView)
 		kt := d.(*key.ChordEvent)
 		ivv.KeyInput(kt)

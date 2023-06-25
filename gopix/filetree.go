@@ -27,7 +27,7 @@ func ParentPixView(kn ki.Ki) (*PixView, bool) {
 		return nil, false
 	}
 	var pv *PixView
-	kn.FuncUpParent(0, kn, func(k ki.Ki, level int, d interface{}) bool {
+	kn.FuncUpParent(0, kn, func(k ki.Ki, level int, d any) bool {
 		if pvi := k.Embed(KiT_PixView); pvi != nil {
 			pv = pvi.(*PixView)
 			return false

@@ -141,7 +141,7 @@ func (pv *PixView) Config(imgdir string) {
 
 	pv.ConfigToolbar()
 
-	ft.TreeViewSig.Connect(pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+	ft.TreeViewSig.Connect(pv.This(), func(recv, send ki.Ki, sig int64, data any) {
 		if data == nil {
 			return
 		}
@@ -159,7 +159,7 @@ func (pv *PixView) Config(imgdir string) {
 			}
 		}
 	})
-	ig.WidgetSig.Connect(pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+	ig.WidgetSig.Connect(pv.This(), func(recv, send ki.Ki, sig int64, data any) {
 		if sig == int64(gi.WidgetSelected) {
 			pvv, _ := recv.Embed(KiT_PixView).(*PixView)
 			idx := data.(int)
@@ -168,7 +168,7 @@ func (pv *PixView) Config(imgdir string) {
 			}
 		}
 	})
-	ig.ImageSig.Connect(pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+	ig.ImageSig.Connect(pv.This(), func(recv, send ki.Ki, sig int64, data any) {
 		igg, _ := send.Embed(imgrid.KiT_ImgGrid).(*imgrid.ImgGrid)
 		pvv, _ := recv.Embed(KiT_PixView).(*PixView)
 		idx := data.(int)
@@ -320,33 +320,33 @@ func (pv *PixView) ImgGridCtxtMenu(m *gi.Menu, idx int) {
 	}
 	pi := pv.Info[idx]
 	m.AddAction(gi.ActOpts{Label: "Info", Data: idx},
-		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		pv.This(), func(recv, send ki.Ki, sig int64, data any) {
 			pv.InfoFile(pi)
 		})
 	m.AddAction(gi.ActOpts{Label: "SetDate", Data: idx},
-		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		pv.This(), func(recv, send ki.Ki, sig int64, data any) {
 			pv.SetCurFile(pi, idx)
 			giv.CallMethod(pv, "SetDateTakenCur", pv.Viewport)
 		})
 	m.AddSeparator("clip")
 	m.AddAction(gi.ActOpts{Label: "Copy", Data: idx},
-		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		pv.This(), func(recv, send ki.Ki, sig int64, data any) {
 			ig.CopyIdxs(true)
 		})
 	m.AddAction(gi.ActOpts{Label: "Cut", Data: idx},
-		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		pv.This(), func(recv, send ki.Ki, sig int64, data any) {
 			ig.CutIdxs()
 		})
 	m.AddAction(gi.ActOpts{Label: "Paste", Data: idx},
-		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		pv.This(), func(recv, send ki.Ki, sig int64, data any) {
 			ig.PasteIdx(data.(int))
 		})
 	m.AddAction(gi.ActOpts{Label: "Duplicate", Data: idx},
-		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		pv.This(), func(recv, send ki.Ki, sig int64, data any) {
 			pv.Duplicate(pi)
 		})
 	m.AddAction(gi.ActOpts{Label: "Delete", Data: idx},
-		pv.This(), func(recv, send ki.Ki, sig int64, data interface{}) {
+		pv.This(), func(recv, send ki.Ki, sig int64, data any) {
 			ig.CutIdxs()
 		})
 }
