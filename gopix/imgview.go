@@ -19,6 +19,8 @@ import (
 // and delete function.
 type ImgView struct {
 	imgview.ImgView
+
+	// pixview for navigating files
 	PixView *PixView `desc:"pixview for navigating files"`
 }
 

@@ -31,20 +31,48 @@ import (
 // and currently selected view.
 type PixView struct {
 	gi.Frame
-	CurFile     string                `desc:"current file base name (no path, no ext) -- viewed in Current bitmap or last selected in ImgGrid"`
-	CurIdx      int                   `desc:"index of current file in Info list"`
-	ImageDir    string                `desc:"directory with the images"`
-	Folder      string                `desc:"current folder"`
-	Folders     []string              `desc:"list of all folders, excluding All and Trash"`
+
+	// current file base name (no path, no ext) -- viewed in Current bitmap or last selected in ImgGrid
+	CurFile string `desc:"current file base name (no path, no ext) -- viewed in Current bitmap or last selected in ImgGrid"`
+
+	// index of current file in Info list
+	CurIdx int `desc:"index of current file in Info list"`
+
+	// directory with the images
+	ImageDir string `desc:"directory with the images"`
+
+	// current folder
+	Folder string `desc:"current folder"`
+
+	// list of all folders, excluding All and Trash
+	Folders []string `desc:"list of all folders, excluding All and Trash"`
+
+	// list of all files in all Folders -- used for e.g., large renames
 	FolderFiles []map[string]struct{} `desc:"list of all files in all Folders -- used for e.g., large renames"`
-	Files       giv.FileTree          `desc:"all the files in the project directory and subdirectories"`
-	Info        picinfo.Pics          `desc:"info for all the pictures in current folder"`
-	AllInfo     picinfo.PicMap        `desc:"map of info for all files"`
-	AllMu       sync.Mutex            `desc:"mutex protecting AllInfo local access within processing steps"`
-	UpdtMu      sync.Mutex            `desc:"mutex for any big task involving updating AllInfo"`
-	Thumbs      []string              `view:"-" desc:"desc list of all thumb files in current folder -- sent to ImgGrid -- must be in 1-to-1 order with Info"`
-	WaitGp      sync.WaitGroup        `view:"-" desc:"wait group for synchronizing threaded layer calls"`
-	PProg       *gi.ProgressBar       `view:"-" desc:"parallel progress monitor"`
+
+	// all the files in the project directory and subdirectories
+	Files giv.FileTree `desc:"all the files in the project directory and subdirectories"`
+
+	// info for all the pictures in current folder
+	Info picinfo.Pics `desc:"info for all the pictures in current folder"`
+
+	// map of info for all files
+	AllInfo picinfo.PicMap `desc:"map of info for all files"`
+
+	// mutex protecting AllInfo local access within processing steps
+	AllMu sync.Mutex `desc:"mutex protecting AllInfo local access within processing steps"`
+
+	// mutex for any big task involving updating AllInfo
+	UpdtMu sync.Mutex `desc:"mutex for any big task involving updating AllInfo"`
+
+	// desc list of all thumb files in current folder -- sent to ImgGrid -- must be in 1-to-1 order with Info
+	Thumbs []string `view:"-" desc:"desc list of all thumb files in current folder -- sent to ImgGrid -- must be in 1-to-1 order with Info"`
+
+	// wait group for synchronizing threaded layer calls
+	WaitGp sync.WaitGroup `view:"-" desc:"wait group for synchronizing threaded layer calls"`
+
+	// parallel progress monitor
+	PProg *gi.ProgressBar `view:"-" desc:"parallel progress monitor"`
 }
 
 var KiT_PixView = kit.Types.AddType(&PixView{}, PixViewProps)

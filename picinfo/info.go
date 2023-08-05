@@ -17,24 +17,60 @@ import (
 
 // Info is the information about a picture / video file
 type Info struct {
-	File      string            `json:"-" desc:"full path to image file name"`
-	Ext       string            `desc:"extension of the file name"`
-	Desc      string            `desc:"image description -- can contain arbitrary user comments -- ascii encoded"`
-	FileMod   time.Time         `desc:"date when image file was modified"`
-	Sup       filecat.Supported `desc:"supported type of image file, decoded from extension, using gopi/filecat system"`
-	Number    int               `desc:"if there are multiple files taken at the same time, e.g., in a Burst, this is the number"`
-	Size      image.Point       `desc:"size of image in raw pixels"`
-	Depth     int               `desc:"number of bits in each color component (e.g., 8 is typical)"`
-	Orient    Orientations      `desc:"orientation of the image using exif standards that include rotation and mirroring"`
-	DateTaken time.Time         `desc:"date when the image / video was taken"`
-	DateMod   time.Time         `desc:"date when image was last modified / edited"`
-	GPSLoc    GPSCoord          `view:"inline" desc:"GPS coordinates of location of shot"`
-	GPSMisc   GPSMisc           `desc:"GPS misc additional data"`
-	GPSDate   time.Time         `desc:"GPS version of the time"`
-	Exposure  Exposure          `desc:"standard exposure info"`
-	Tags      map[string]string `desc:"full set of name / value tags"`
-	Thumb     string            `json:"-" view:"-" desc:"full path to thumb file name -- e.g., encoded as a .jpg"`
-	Flagged   bool              `json:"-" view:"-" desc:"general-purpose flag state, e.g., for pruning old files"`
+
+	// full path to image file name
+	File string `json:"-" desc:"full path to image file name"`
+
+	// extension of the file name
+	Ext string `desc:"extension of the file name"`
+
+	// image description -- can contain arbitrary user comments -- ascii encoded
+	Desc string `desc:"image description -- can contain arbitrary user comments -- ascii encoded"`
+
+	// date when image file was modified
+	FileMod time.Time `desc:"date when image file was modified"`
+
+	// supported type of image file, decoded from extension, using gopi/filecat system
+	Sup filecat.Supported `desc:"supported type of image file, decoded from extension, using gopi/filecat system"`
+
+	// if there are multiple files taken at the same time, e.g., in a Burst, this is the number
+	Number int `desc:"if there are multiple files taken at the same time, e.g., in a Burst, this is the number"`
+
+	// size of image in raw pixels
+	Size image.Point `desc:"size of image in raw pixels"`
+
+	// number of bits in each color component (e.g., 8 is typical)
+	Depth int `desc:"number of bits in each color component (e.g., 8 is typical)"`
+
+	// orientation of the image using exif standards that include rotation and mirroring
+	Orient Orientations `desc:"orientation of the image using exif standards that include rotation and mirroring"`
+
+	// date when the image / video was taken
+	DateTaken time.Time `desc:"date when the image / video was taken"`
+
+	// date when image was last modified / edited
+	DateMod time.Time `desc:"date when image was last modified / edited"`
+
+	// GPS coordinates of location of shot
+	GPSLoc GPSCoord `view:"inline" desc:"GPS coordinates of location of shot"`
+
+	// GPS misc additional data
+	GPSMisc GPSMisc `desc:"GPS misc additional data"`
+
+	// GPS version of the time
+	GPSDate time.Time `desc:"GPS version of the time"`
+
+	// standard exposure info
+	Exposure Exposure `desc:"standard exposure info"`
+
+	// full set of name / value tags
+	Tags map[string]string `desc:"full set of name / value tags"`
+
+	// full path to thumb file name -- e.g., encoded as a .jpg
+	Thumb string `json:"-" view:"-" desc:"full path to thumb file name -- e.g., encoded as a .jpg"`
+
+	// general-purpose flag state, e.g., for pruning old files
+	Flagged bool `json:"-" view:"-" desc:"general-purpose flag state, e.g., for pruning old files"`
 }
 
 func (pi *Info) Defaults() {
@@ -223,19 +259,37 @@ func (or Orientations) OrientSize(sz image.Point) image.Point {
 
 // GPSCoord is a GPS position as decimal degrees
 type GPSCoord struct {
-	Lat  float64 `desc:"latitutde as decimal degrees -- a single value in range +/-90.etc"`
+
+	// latitutde as decimal degrees -- a single value in range +/-90.etc
+	Lat float64 `desc:"latitutde as decimal degrees -- a single value in range +/-90.etc"`
+
+	// longitude as decimal degrees -- a single value in range +/-180.etc
 	Long float64 `desc:"longitude as decimal degrees -- a single value in range +/-180.etc"`
-	Alt  float64 `desc:"altitude in meters"`
+
+	// altitude in meters
+	Alt float64 `desc:"altitude in meters"`
 }
 
 // GPSMisc is GPS bearing and other extra data
 type GPSMisc struct {
-	DestBearing    float64 `desc:"destination bearing -- where is the phone going"`
-	DestBearingRef string  `desc:"reference for bearing:  M = magnetic, T = true north"`
-	ImgDir         float64 `desc:"image direction -- where the phone is pointing"`
-	ImgDirRef      string  `desc:"reference for image direction: M = magnetic, T = true north"`
-	Speed          float64 `desc:"camera speed"`
-	SpeedRef       string  `desc:"camera speed reference: K = Km/hr, M = MPH, N = knots"`
+
+	// destination bearing -- where is the phone going
+	DestBearing float64 `desc:"destination bearing -- where is the phone going"`
+
+	// reference for bearing:  M = magnetic, T = true north
+	DestBearingRef string `desc:"reference for bearing:  M = magnetic, T = true north"`
+
+	// image direction -- where the phone is pointing
+	ImgDir float64 `desc:"image direction -- where the phone is pointing"`
+
+	// reference for image direction: M = magnetic, T = true north
+	ImgDirRef string `desc:"reference for image direction: M = magnetic, T = true north"`
+
+	// camera speed
+	Speed float64 `desc:"camera speed"`
+
+	// camera speed reference: K = Km/hr, M = MPH, N = knots
+	SpeedRef string `desc:"camera speed reference: K = Km/hr, M = MPH, N = knots"`
 }
 
 // DecDegFromDMS converts from degrees, minutes and seconds to a decimal
@@ -245,9 +299,19 @@ func DecDegFromDMS(degs, mins, secs float64) float64 {
 
 // Exposure has standard exposure information
 type Exposure struct {
-	Time     float64 `desc:"exposure time"`
-	FStop    float64 `desc:"fstop"`
+
+	// exposure time
+	Time float64 `desc:"exposure time"`
+
+	// fstop
+	FStop float64 `desc:"fstop"`
+
+	// ISO speed
 	ISOSpeed float64 `desc:"ISO speed"`
+
+	// focal length
 	FocalLen float64 `desc:"focal length"`
+
+	// aperture
 	Aperture float64 `desc:"aperture"`
 }

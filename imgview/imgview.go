@@ -23,9 +23,15 @@ import (
 // ImgView shows a bitmap image with zoom control through keyboard actions
 type ImgView struct {
 	gi.Bitmap
-	Info    *picinfo.Info `desc:"info about the image that is being viewed"`
-	OrigImg image.Image   `desc:"cached version of original image"`
-	Scale   float32       `desc:"current scale"`
+
+	// info about the image that is being viewed
+	Info *picinfo.Info `desc:"info about the image that is being viewed"`
+
+	// cached version of original image
+	OrigImg image.Image `desc:"cached version of original image"`
+
+	// current scale
+	Scale float32 `desc:"current scale"`
 }
 
 var KiT_ImgView = kit.Types.AddType(&ImgView{}, ImgViewProps)
