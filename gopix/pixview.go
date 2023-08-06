@@ -65,13 +65,13 @@ type PixView struct {
 	// mutex for any big task involving updating AllInfo
 	UpdtMu sync.Mutex `desc:"mutex for any big task involving updating AllInfo"`
 
-	// desc list of all thumb files in current folder -- sent to ImgGrid -- must be in 1-to-1 order with Info
+	// [view: -] desc list of all thumb files in current folder -- sent to ImgGrid -- must be in 1-to-1 order with Info
 	Thumbs []string `view:"-" desc:"desc list of all thumb files in current folder -- sent to ImgGrid -- must be in 1-to-1 order with Info"`
 
-	// wait group for synchronizing threaded layer calls
+	// [view: -] wait group for synchronizing threaded layer calls
 	WaitGp sync.WaitGroup `view:"-" desc:"wait group for synchronizing threaded layer calls"`
 
-	// parallel progress monitor
+	// [view: -] parallel progress monitor
 	PProg *gi.ProgressBar `view:"-" desc:"parallel progress monitor"`
 }
 

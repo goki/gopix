@@ -51,7 +51,7 @@ type Info struct {
 	// date when image was last modified / edited
 	DateMod time.Time `desc:"date when image was last modified / edited"`
 
-	// GPS coordinates of location of shot
+	// [view: inline] GPS coordinates of location of shot
 	GPSLoc GPSCoord `view:"inline" desc:"GPS coordinates of location of shot"`
 
 	// GPS misc additional data
@@ -66,10 +66,10 @@ type Info struct {
 	// full set of name / value tags
 	Tags map[string]string `desc:"full set of name / value tags"`
 
-	// full path to thumb file name -- e.g., encoded as a .jpg
+	// [view: -] full path to thumb file name -- e.g., encoded as a .jpg
 	Thumb string `json:"-" view:"-" desc:"full path to thumb file name -- e.g., encoded as a .jpg"`
 
-	// general-purpose flag state, e.g., for pruning old files
+	// [view: -] general-purpose flag state, e.g., for pruning old files
 	Flagged bool `json:"-" view:"-" desc:"general-purpose flag state, e.g., for pruning old files"`
 }
 
