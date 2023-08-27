@@ -4,8 +4,8 @@
 
 Go picture management app, because Mac Photos bricked my entire photo library upon updating to Catalina...
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/goki/gopix)](https://goreportcard.com/report/github.com/goki/gopix)
-[![GoDoc](https://godoc.org/github.com/goki/gopix?status.svg)](https://godoc.org/github.com/goki/gopix)
+[![Go Report Card](https://goreportcard.com/badge/goki.dev/gopix)](https://goreportcard.com/report/goki.dev/gopix)
+[![GoDoc](https://godoc.org/goki.dev/gopix?status.svg)](https://godoc.org/goki.dev/gopix)
 
 # Install
 

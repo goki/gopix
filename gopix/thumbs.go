@@ -19,10 +19,10 @@ import (
 	"github.com/anthonynsimon/bild/clone"
 	"github.com/goki/gi/gi"
 	"github.com/goki/gi/girl"
-	"github.com/goki/gopix/picinfo"
 	"github.com/goki/ki/dirs"
 	"github.com/goki/mat32"
 	"github.com/goki/pi/filecat"
+	"goki.dev/gopix/picinfo"
 )
 
 const ThumbMaxSize = 256

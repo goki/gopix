@@ -24,7 +24,7 @@ func main() {
 
 func mainrun() {
 	oswin.TheApp.SetName("gopix")
-	oswin.TheApp.SetAbout(`<code>GoPix</code> Is a Go picture management system within the <b>GoKi</b> tree framework.  See <a href="https://github.com/goki/gopix">GoPix on GitHub</a>`)
+	oswin.TheApp.SetAbout(`<code>GoPix</code> Is a Go picture management system within the <b>GoKi</b> tree framework.  See <a href="https://goki.dev/gopix">GoPix on GitHub</a>`)
 
 	// oswin.TheApp.SetQuitCleanFunc(func() {
 	// 	fmt.Printf("Doing final Quit cleanup here..\n")

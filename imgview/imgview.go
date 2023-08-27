@@ -14,10 +14,10 @@ import (
 	"github.com/goki/gi/oswin/key"
 	"github.com/goki/gi/oswin/mouse"
 	"github.com/goki/gi/units"
-	"github.com/goki/gopix/picinfo"
 	"github.com/goki/ki/ki"
 	"github.com/goki/ki/kit"
 	"github.com/goki/mat32"
+	"goki.dev/gopix/picinfo"
 )
 
 // ImgView shows a bitmap image with zoom control through keyboard actions

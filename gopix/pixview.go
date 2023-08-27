@@ -18,13 +18,13 @@ import (
 	"github.com/goki/gi/giv"
 	"github.com/goki/gi/oswin"
 	"github.com/goki/gi/oswin/mouse"
-	"github.com/goki/gopix/imgrid"
-	"github.com/goki/gopix/picinfo"
 	"github.com/goki/ki/dirs"
 	"github.com/goki/ki/ki"
 	"github.com/goki/ki/kit"
 	"github.com/goki/ki/sliceclone"
 	"github.com/goki/pi/filecat"
+	"goki.dev/gopix/imgrid"
+	"goki.dev/gopix/picinfo"
 )
 
 // PixView is a picture viewer with a folder view on the left, and a tab bar with image grid

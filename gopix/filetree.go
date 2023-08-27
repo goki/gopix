@@ -15,10 +15,10 @@ import (
 	"github.com/goki/gi/oswin/dnd"
 	"github.com/goki/gi/oswin/mimedata"
 	"github.com/goki/gi/units"
-	"github.com/goki/gopix/picinfo"
 	"github.com/goki/ki/dirs"
 	"github.com/goki/ki/ki"
 	"github.com/goki/ki/kit"
+	"goki.dev/gopix/picinfo"
 )
 
 // ParentPixView returns the PixView parent of given node

@@ -10,9 +10,9 @@ import (
 	"github.com/goki/gi/gi"
 	"github.com/goki/gi/oswin"
 	"github.com/goki/gi/oswin/key"
-	"github.com/goki/gopix/imgview"
 	"github.com/goki/ki/ki"
 	"github.com/goki/ki/kit"
+	"goki.dev/gopix/imgview"
 )
 
 // ImgView is gopix version of ImgView with keyboard navigation through list of images

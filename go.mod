@@ -1,4 +1,4 @@
-module github.com/goki/gopix
+module goki.dev/gopix
 
 go 1.18
 
