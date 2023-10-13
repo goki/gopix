@@ -25,13 +25,13 @@ type ImgView struct {
 	gi.Bitmap
 
 	// info about the image that is being viewed
-	Info *picinfo.Info `desc:"info about the image that is being viewed"`
+	Info *picinfo.Info
 
 	// cached version of original image
-	OrigImg image.Image `desc:"cached version of original image"`
+	OrigImg image.Image
 
 	// current scale
-	Scale float32 `desc:"current scale"`
+	Scale float32
 }
 
 var KiT_ImgView = kit.Types.AddType(&ImgView{}, ImgViewProps)

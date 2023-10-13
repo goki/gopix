@@ -31,37 +31,37 @@ type ImgGrid struct {
 	gi.Frame
 
 	// maximum size for images -- geom set to square of this size
-	ImageMax float32 `desc:"maximum size for images -- geom set to square of this size"`
+	ImageMax float32
 
 	// list of image files to display
-	Images []string `desc:"list of image files to display"`
+	Images []string
 
 	// function for displaying context menu for item at given index -- if not set then a basic standard one is used
-	CtxtMenuFunc func(m *gi.Menu, idx int) `desc:"function for displaying context menu for item at given index -- if not set then a basic standard one is used"`
+	CtxtMenuFunc func(m *gi.Menu, idx int)
 
 	// if true, drag-n-drop and paste actions actually result in insertion -- otherwise they just drive signals to be managed externally
-	InsertOk bool `desc:"if true, drag-n-drop and paste actions actually result in insertion -- otherwise they just drive signals to be managed externally"`
+	InsertOk bool
 
 	// last selected item
-	SelectedIdx int `desc:"last selected item"`
+	SelectedIdx int
 
 	// editing-mode select rows mode
-	SelectMode bool `copy:"-" desc:"editing-mode select rows mode"`
+	SelectMode bool `copy:"-"`
 
 	// list of currently-selected file indexes
-	SelectedIdxs map[int]struct{} `copy:"-" desc:"list of currently-selected file indexes"`
+	SelectedIdxs map[int]struct{} `copy:"-"`
 
 	// list of currently-dragged indexes
-	DraggedIdxs []int `copy:"-" desc:"list of currently-dragged indexes"`
+	DraggedIdxs []int `copy:"-"`
 
 	// signal for image events -- selection events occur via WidgetSig
-	ImageSig ki.Signal `copy:"-" json:"-" xml:"-" desc:"signal for image events -- selection events occur via WidgetSig"`
+	ImageSig ki.Signal `copy:"-" json:"-" xml:"-"`
 
 	// number of columns and rows to display -- computed from avail room
-	Size image.Point `desc:"number of columns and rows to display -- computed from avail room"`
+	Size image.Point
 
 	// current copy / paste idx
-	CurIdx int `copy:"-" json:"-" xml:"-" desc:"current copy / paste idx"`
+	CurIdx int `copy:"-" json:"-" xml:"-"`
 }
 
 var KiT_ImgGrid = kit.Types.AddType(&ImgGrid{}, ImgGridProps)

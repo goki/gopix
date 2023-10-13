@@ -21,7 +21,7 @@ type ImgView struct {
 	imgview.ImgView
 
 	// pixview for navigating files
-	PixView *PixView `desc:"pixview for navigating files"`
+	PixView *PixView
 }
 
 var KiT_ImgView = kit.Types.AddType(&ImgView{}, ImgViewProps)
