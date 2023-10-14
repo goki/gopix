@@ -142,7 +142,7 @@ func (pv *PixView) Config(imgdir string) {
 	pv.SetProp("spacing", gi.StdDialogVSpaceUnits)
 	tbar := gi.AddNewLayout(pv, "topbar", gi.LayoutHoriz)
 	tbar.SetStretchMaxWidth()
-	gi.AddNewToolBar(tbar, "toolbar")
+	gi.AddNewToolbar(tbar, "toolbar")
 	pv.PProg = gi.AddNewProgressBar(tbar, "progress")
 	split := gi.AddNewSplitView(pv, "splitview")
 
@@ -250,9 +250,9 @@ func (pv *PixView) CurImgView() *ImgView {
 	return pv.Tabs().TabByName("Current").(*ImgView)
 }
 
-// ToolBar returns the toolbar widget
-func (pv *PixView) ToolBar() *gi.ToolBar {
-	return pv.ChildByName("topbar", 0).ChildByName("toolbar", 0).(*gi.ToolBar)
+// Toolbar returns the toolbar widget
+func (pv *PixView) Toolbar() *gi.Toolbar {
+	return pv.ChildByName("topbar", 0).ChildByName("toolbar", 0).(*gi.Toolbar)
 }
 
 // ProgBar returns the progress indicator
@@ -319,16 +319,16 @@ func (pv *PixView) FileNodeClosed(fn *giv.FileNode, tvn *FileTreeView) {
 
 // ConfigToolbar adds a PixView toolbar.
 func (pv *PixView) ConfigToolbar() {
-	tb := pv.ToolBar()
+	tb := pv.Toolbar()
 	if tb != nil && tb.HasChildren() {
 		return
 	}
 	tb.SetStretchMaxWidth()
-	giv.ToolBarView(pv, pv.Viewport, tb)
+	giv.ToolbarView(pv, pv.Viewport, tb)
 }
 
 func (pv *PixView) Render2D() {
-	pv.ToolBar().UpdateActions()
+	pv.Toolbar().UpdateActions()
 	if win := pv.ParentWindow(); win != nil {
 		if !win.IsResizing() {
 			win.MainMenuUpdateActives()
@@ -966,7 +966,7 @@ func GoPixViewWindow(path string) (*PixView, *gi.Window) {
 	mmen := win.MainMenu
 	giv.MainMenuView(pv, win, mmen)
 
-	tb := pv.ToolBar()
+	tb := pv.Toolbar()
 	tb.UpdateActions()
 
 	// inClosePrompt := false
@@ -1008,7 +1008,7 @@ var PixViewProps = ki.Props{
 	"color":            &gi.Prefs.Colors.Font,
 	"max-width":        -1,
 	"max-height":       -1,
-	"ToolBar": ki.PropSlice{
+	"Toolbar": ki.PropSlice{
 		{"UpdateFiles", ki.Props{
 			"icon":  "update",
 			"label": "Update Folders",
