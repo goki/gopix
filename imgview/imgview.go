@@ -158,12 +158,12 @@ func (iv *ImgView) KeyInput(kt *key.ChordEvent) {
 	if kt.IsProcessed() {
 		return
 	}
-	kf := gi.KeyFun(kt.Chord())
+	kf := keyfun.(kt.Chord())
 	switch kf {
-	case gi.KeyFunZoomIn:
+	case keyfun.ZoomIn:
 		kt.SetProcessed()
 		iv.ZoomIn()
-	case gi.KeyFunZoomOut:
+	case keyfun.ZoomOut:
 		kt.SetProcessed()
 		iv.ZoomOut()
 	}

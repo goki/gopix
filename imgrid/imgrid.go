@@ -1202,7 +1202,7 @@ func (ig *ImgGrid) KeyInputActive(kt *key.ChordEvent) {
 	if gi.KeyEventTrace {
 		fmt.Printf("ImgGrid KeyInput: %v\n", ig.Path())
 	}
-	kf := gi.KeyFun(kt.Chord())
+	kf := keyfun.(kt.Chord())
 	selMode := mouse.SelectModeBits(kt.Modifiers)
 	if selMode == mouse.SelectOne {
 		if ig.SelectMode {
@@ -1211,66 +1211,66 @@ func (ig *ImgGrid) KeyInputActive(kt *key.ChordEvent) {
 	}
 	idx := ig.SelectedIdx
 	switch kf {
-	case gi.KeyFunCancelSelect:
+	case keyfun.CancelSelect:
 		ig.UnselectAllIdxs()
 		ig.SelectMode = false
 		kt.SetProcessed()
-	case gi.KeyFunMoveRight:
+	case keyfun.MoveRight:
 		ig.MoveNextAction(selMode)
 		kt.SetProcessed()
-	case gi.KeyFunMoveLeft:
+	case keyfun.MoveLeft:
 		ig.MovePrevAction(selMode)
 		kt.SetProcessed()
-	case gi.KeyFunMoveDown:
+	case keyfun.MoveDown:
 		ig.MoveDownAction(selMode)
 		kt.SetProcessed()
-	case gi.KeyFunMoveUp:
+	case keyfun.MoveUp:
 		ig.MoveUpAction(selMode)
 		kt.SetProcessed()
-	case gi.KeyFunPageDown:
+	case keyfun.PageDown:
 		ig.MovePageDownAction(selMode)
 		kt.SetProcessed()
-	case gi.KeyFunPageUp:
+	case keyfun.PageUp:
 		ig.MovePageUpAction(selMode)
 		kt.SetProcessed()
-	case gi.KeyFunSelectMode:
+	case keyfun.SelectMode:
 		ig.SelectMode = !ig.SelectMode
 		kt.SetProcessed()
-	case gi.KeyFunSelectAll:
+	case keyfun.SelectAll:
 		ig.SelectAllIdxs()
 		ig.SelectMode = false
 		kt.SetProcessed()
-	case gi.KeyFunDelete:
+	case keyfun.Delete:
 		ig.CutIdxs()
 		ig.SelectMode = false
 		kt.SetProcessed()
-	case gi.KeyFunDuplicate:
+	case keyfun.Duplicate:
 		nidx := ig.Duplicate()
 		ig.SelectMode = false
 		if nidx >= 0 {
 			ig.SelectIdxAction(nidx, mouse.SelectOne)
 		}
 		kt.SetProcessed()
-	case gi.KeyFunInsert:
+	case keyfun.Insert:
 		ig.ImageInsertAt(idx, []string{""})
 		ig.SelectMode = false
 		ig.SelectIdxAction(idx+1, mouse.SelectOne) // todo: somehow nidx not working
 		kt.SetProcessed()
-	case gi.KeyFunInsertAfter:
+	case keyfun.InsertAfter:
 		ig.ImageInsertAt(idx+1, []string{""})
 		ig.SelectMode = false
 		ig.SelectIdxAction(idx+1, mouse.SelectOne)
 		kt.SetProcessed()
-	case gi.KeyFunCopy:
+	case keyfun.Copy:
 		ig.CopyIdxs(true)
 		ig.SelectMode = false
 		ig.SelectIdxAction(idx, mouse.SelectOne)
 		kt.SetProcessed()
-	case gi.KeyFunCut:
+	case keyfun.Cut:
 		ig.CutIdxs()
 		ig.SelectMode = false
 		kt.SetProcessed()
-	case gi.KeyFunPaste:
+	case keyfun.Paste:
 		ig.PasteIdx(ig.SelectedIdx)
 		ig.SelectMode = false
 		kt.SetProcessed()

@@ -60,22 +60,22 @@ func (iv *ImgView) KeyInput(kt *key.ChordEvent) {
 	if kt.IsProcessed() {
 		return
 	}
-	kf := gi.KeyFun(kt.Chord())
+	kf := keyfun.(kt.Chord())
 	switch kf {
-	case gi.KeyFunZoomIn:
+	case keyfun.ZoomIn:
 		kt.SetProcessed()
 		iv.ZoomIn()
-	case gi.KeyFunZoomOut:
+	case keyfun.ZoomOut:
 		kt.SetProcessed()
 		iv.ZoomOut()
-	case gi.KeyFunDelete, gi.KeyFunBackspace:
+	case keyfun.Delete, keyfun.Backspace:
 		kt.SetProcessed()
 		iv.PixView.DeleteCurPic()
 		iv.PixView.ViewRefresh() // auto next
-	case gi.KeyFunMoveRight, gi.KeyFunMoveDown:
+	case keyfun.MoveRight, keyfun.MoveDown:
 		kt.SetProcessed()
 		iv.PixView.ViewNext()
-	case gi.KeyFunMoveLeft, gi.KeyFunMoveUp:
+	case keyfun.MoveLeft, keyfun.MoveUp:
 		kt.SetProcessed()
 		iv.PixView.ViewPrev()
 	}

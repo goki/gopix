@@ -174,13 +174,13 @@ var FileTreeViewProps = ki.Props{
 		{"DuplicateFiles", ki.Props{
 			"label": "Duplicate",
 			// "updtfunc": FileTreeInactiveDirFunc,
-			"shortcut": gi.KeyFunDuplicate,
+			"shortcut": keyfun.Duplicate,
 		}},
 		{"DeleteFiles", ki.Props{
 			"label": "Delete",
 			"desc":  "Ok to delete file(s)?  This is not undoable and is not moving to trash / recycle bin",
 			// "updtfunc": FileTreeInactiveExternFunc,
-			"shortcut": gi.KeyFunDelete,
+			"shortcut": keyfun.Delete,
 		}},
 		{"RenameFiles", ki.Props{
 			"label": "Rename",
@@ -198,7 +198,7 @@ var FileTreeViewProps = ki.Props{
 		{"NewFolder", ki.Props{
 			"label":    "New Folder...",
 			"desc":     "make a new folder within this folder",
-			"shortcut": gi.KeyFunInsertAfter,
+			"shortcut": keyfun.InsertAfter,
 			// "updtfunc": FileTreeActiveDirFunc,
 			"Args": ki.PropSlice{
 				{"Folder Name", ki.Props{
