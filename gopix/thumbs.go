@@ -228,7 +228,7 @@ func (pv *PixView) ThumbGen(pi *picinfo.Info) error {
 		pv.Sty.Font.Color.SetUInt8(0, 0, 0, 0xff)
 	}
 	tr.SetString(ds, &pv.Sty.Font, &pv.Sty.UnContext, &pv.Sty.Text, true, 0, 1)
-	tr.RenderTopPos(rs, mat32.Vec2{5, 5})
+	tr.RenderTopPos(rs, mat32.V2(5, 5))
 	err = picinfo.SaveImage(pi.Thumb, rgb)
 	return err
 }
