@@ -1,4 +1,4 @@
-// Copyright (c) 2020, The gide / GoKi Authors. All rights reserved.
+// Copyright (c) 2020, The gide / Goki Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
@@ -24,7 +24,7 @@ func main() {
 
 func mainrun() {
 	oswin.TheApp.SetName("gopix")
-	oswin.TheApp.SetAbout(`<code>GoPix</code> Is a Go picture management system within the <b>GoKi</b> tree framework.  See <a href="https://goki.dev/gopix">GoPix on GitHub</a>`)
+	oswin.TheApp.SetAbout(`<code>GoPix</code> Is a Go picture management system within the <b>Goki</b> tree framework.  See <a href="https://goki.dev/gopix">GoPix on GitHub</a>`)
 
 	// oswin.TheApp.SetQuitCleanFunc(func() {
 	// 	fmt.Printf("Doing final Quit cleanup here..\n")
