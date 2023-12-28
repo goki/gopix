@@ -138,7 +138,7 @@ func (iv *ImgView) ImgViewMouseEvents() {
 }
 
 func (iv *ImgView) KeyInput(kt *key.ChordEvent) {
-	if gi.KeyEventTrace {
+	if gi.DebugSettings.KeyEventTrace {
 		fmt.Printf("ImgView KeyInput: %v\n", iv.Path())
 	}
 	switch kt.Chord() {

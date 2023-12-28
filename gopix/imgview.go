@@ -32,7 +32,7 @@ func AddNewImgView(parent ki.Ki, name string) *ImgView {
 }
 
 func (iv *ImgView) KeyInput(kt *key.ChordEvent) {
-	if gi.KeyEventTrace {
+	if gi.DebugSettings.KeyEventTrace {
 		fmt.Printf("ImgView KeyInput: %v\n", iv.Path())
 	}
 	switch kt.Chord() {

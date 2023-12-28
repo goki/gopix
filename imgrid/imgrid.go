@@ -1199,7 +1199,7 @@ func (ig *ImgGrid) ItemCtxtMenu(idx int) {
 }
 
 func (ig *ImgGrid) KeyInputActive(kt *key.ChordEvent) {
-	if gi.KeyEventTrace {
+	if gi.DebugSettings.KeyEventTrace {
 		fmt.Printf("ImgGrid KeyInput: %v\n", ig.Path())
 	}
 	kf := keyfun.(kt.Chord())
