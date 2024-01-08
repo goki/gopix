@@ -858,7 +858,7 @@ func (ig *ImgGrid) Copy(reset bool) {
 	}
 	md := ig.CopySelToMime()
 	if md != nil {
-		oswin.TheApp.ClipBoard(ig.Viewport.Win.OSWin).Write(md)
+		oswin.TheApp.Clipboard(ig.Viewport.Win.OSWin).Write(md)
 	}
 	if reset {
 		ig.UnselectAllIdxs()
@@ -916,7 +916,7 @@ func (ig *ImgGrid) CutIdxs() {
 // Paste pastes clipboard at CurIdx
 // satisfies gi.Clipper interface and can be overridden by subtypes
 func (ig *ImgGrid) Paste() {
-	md := oswin.TheApp.ClipBoard(ig.Viewport.Win.OSWin).Read([]string{filecat.TextPlain})
+	md := oswin.TheApp.Clipboard(ig.Viewport.Win.OSWin).Read([]string{filecat.TextPlain})
 	if md != nil {
 		ig.PasteMenu(md, ig.CurIdx)
 	}
@@ -997,7 +997,7 @@ func (ig *ImgGrid) Duplicate() int {
 	ixs := ig.SelectedIdxsList(true) // descending sort -- last first
 	pasteAt := ixs[0]
 	ig.CopyIdxs(true)
-	md := oswin.TheApp.ClipBoard(ig.Viewport.Win.OSWin).Read([]string{filecat.TextPlain})
+	md := oswin.TheApp.Clipboard(ig.Viewport.Win.OSWin).Read([]string{filecat.TextPlain})
 	ig.PasteAtIdx(md, pasteAt)
 	return pasteAt
 }
