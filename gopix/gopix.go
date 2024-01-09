@@ -12,17 +12,10 @@ import (
 	"path/filepath"
 
 	"github.com/goki/gi/gi"
-	"github.com/goki/gi/gimain"
 	"github.com/goki/gi/oswin"
 )
 
 func main() {
-	gimain.Main(func() {
-		mainrun()
-	})
-}
-
-func mainrun() {
 	oswin.TheApp.SetName("gopix")
 	oswin.TheApp.SetAbout(`<code>GoPix</code> Is a Go picture management system within the <b>Goki</b> tree framework.  See <a href="https://goki.dev/gopix">GoPix on GitHub</a>`)
 
