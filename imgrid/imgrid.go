@@ -317,7 +317,7 @@ func (ig *ImgGrid) Render2D() {
 		return
 	}
 	if ig.PushBounds() {
-		ig.FrameStdRender()
+		ig.RenderFrame()
 		ig.RenderSelected()
 		ig.This().(gi.Node2D).ConnectEvents2D()
 		if ig.ScrollsOff {
